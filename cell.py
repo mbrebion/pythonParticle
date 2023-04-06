@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
 import numbaAccelerated
 import thermo
+import time
 
 INITSIZEEXTRARATIO = 1.2
 
@@ -173,8 +174,14 @@ class Cell:
     #######################################
 
     def collide(self):
+        """
+        Compute collisions between particles
+        nbNeighbour is the number of neighbours par particle i which are checked
+        :return:
+        """
+        nbNeighbour = 2*int(self.nbPart**0.5)
         self.nbCollision += numbaAccelerated.detectAllCollisions(self.xs, self.ys, self.vxs, self.vys, self.wheres,
-                                                                 self.colors, Cell.dt, Cell.ds, 30)
+                                                                 self.colors, Cell.dt, Cell.ds, nbNeighbour)
 
     #######################################
 
@@ -182,15 +189,18 @@ class Cell:
         return numbaAccelerated.sortCell(self.xs, self.ys, self.vxs, self.vys, self.wheres, self.colors)
 
     def update(self):
+
         self.advect()
 
-        swaps = 0
-        swaps = self.sort()
+        self.sort()
+
         self.collide()
+
         self.computeTemperature()
+
         self.wallBounce()
 
-        return swaps
+
 
     def ouputBuffer(self):
         numbaAccelerated.twoArraysToOne(self.xs, self.ys, self.wheres, self.positions)

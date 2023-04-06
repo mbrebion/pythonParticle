@@ -1,3 +1,5 @@
+import time
+
 from glumpy import app, gl, gloo
 from glumpy.graphics.text import FontManager
 from glumpy.graphics.collections import GlyphCollection
@@ -59,7 +61,7 @@ class Window:
         Y = 0.1
         Cell.thermodynamicSetup(T, X, Y, P, nPart)
         self.cell = Cell(1, T)
-        Cell.dt *= 1
+        Cell.dt *= 0.5
 
         # window
         self.resX = 1024
@@ -78,7 +80,9 @@ class Window:
         self.window.on_resize = self.on_resize
         self.window.on_draw = self.on_draw
 
+        # timing
         self.timeStep = 0
+        self.duration = 1e-4
 
         self.createLabels()
 
@@ -90,6 +94,7 @@ class Window:
 
         self.labels.append("_", self.regular, origin=(20, 20, 0), scale=0.5, anchor_x="left")
         self.labels.append("_", self.regular, origin=(20, 40, 0), scale=0.5, anchor_x="left")
+        self.labels.append("_", self.regular, origin=(20, 40, 0), scale=0.5, anchor_x="left")
 
         self.window.attach(self.labels["transform"])
         self.window.attach(self.labels["viewport"])
@@ -97,11 +102,15 @@ class Window:
     def updateLabels(self):
         self.labels.__delitem__(0)
         self.labels.__delitem__(0)
-        self.cell.computeTemperature()
+        self.labels.__delitem__(0)
+
         textT = " T = " + str(self.cell.temperature)[0:5] + " K"
-        textP = "P = " + str(self.cell.averagedPressure)[0:5] + " Pa"
-        self.labels.append(textT, self.regular, origin=(25, 30, 0), scale=0.8, anchor_x="left")
-        self.labels.append(textP, self.regular, origin=(25, 80, 0), scale=0.8, anchor_x="left")
+        textP = " P = " + str(self.cell.averagedPressure)[0:5] + " Pa"
+        textDuration = " C. Time = " + "{:.2e}".format(self.duration*1000) + " ms"
+
+        self.labels.append(textT, self.regular, origin=(25, 110, 0), scale=0.8, anchor_x="left")
+        self.labels.append(textP, self.regular, origin=(25, 70, 0), scale=0.8, anchor_x="left")
+        self.labels.append(textDuration, self.regular, origin=(25, 30, 0), scale=0.8, anchor_x="left")
 
     def getRadius(self):
         return self.cell.ds / self.cell.length * self.resX
@@ -118,8 +127,15 @@ class Window:
         self.program['position'] = self.cell.ouputBuffer()
         self.program['color'] = self.cell.colors
 
-        self.cell.update()
-        self.cell.update()
+        alpha = 0.01
+        nStep = 2
+        tInit = time.perf_counter()
+
+        for i in range(nStep):
+            self.cell.update()
+
+        self.duration = (time.perf_counter() - tInit) / nStep * alpha + (1 - alpha) * self.duration
+
         self.program.draw(gl.GL_POINTS)
 
         if self.timeStep % 10 == 0:
@@ -127,7 +143,7 @@ class Window:
         self.labels.draw()
 
 
-window = Window(500, 1e5, 300)
+window = Window(1000, 1e5, 300)
 
 # TODO : move xs, ys into single arrays ; same for vxs,vys
 # TODO implement collision detection bases on radius
