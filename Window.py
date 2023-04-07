@@ -1,5 +1,5 @@
 import time
-
+import numpy as np
 from glumpy import app, gl, gloo
 from glumpy.graphics.text import FontManager
 from glumpy.graphics.collections import GlyphCollection
@@ -128,7 +128,7 @@ class Window:
         self.program['color'] = self.cell.colors
 
         alpha = 0.01
-        nStep = 2
+        nStep = 5
         tInit = time.perf_counter()
 
         for i in range(nStep):
@@ -140,6 +140,7 @@ class Window:
 
         if self.timeStep % 10 == 0:
             self.updateLabels()
+
         self.labels.draw()
 
 

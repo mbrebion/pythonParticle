@@ -143,23 +143,47 @@ def computeAverageTemperature(vxs, vys, wheres, m, kb):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True)
-def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, nbSearch):
+def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d,  histo):
+    """
+    This method update particle positions and velocities taking into account elastic collisions
+    It first tries to detect efficiently if collisions occurred,
+    assuming that particles are already sorted by y coordinate
+    And then apply collision rules precisely (real instant of collision is computed and particle are shifted correctly)
+
+    :param xs:
+    :param ys:
+    :param vxs:
+    :param vys:
+    :param wheres:
+    :param colors:
+    :param dt: time step
+    :param d: particle diameter
+    :param histo: histogram of collisions detection according to j-i for storing purpose
+    :return: approximation of best nbSearch
+    """
     nbCollide = 0.
     colors[:] = 0.
     ra = np.array([0., 0.])
     rb = np.array([0., 0.])
     va = np.array([0., 0.])
     vb = np.array([0., 0.])
-    for i in prange(len(xs)):
+
+    ln = len(xs)
+    nbSearch = len(histo)
+
+    for i in range(ln - 1):  # last particle can't collide to anyone
         if wheres[i] == 0:
             continue
 
-        for j in range(i, min(len(xs), i + nbSearch)):
-            if wheres[j] == 0 or j == i:
+        for j in range(i + 1, min(len(xs), i + nbSearch)):
+            if wheres[j] == 0:
                 continue
             coll, t = isCollidingFast(xs[i], ys[i], xs[j], ys[j], vxs[i], vys[i], vxs[j], vys[j], dt, d)
+
             if coll:
-                # update of colors (for display purpose)
+                # record strategy
+                histo[j - i] +=1
+
                 colors[i] = 0.5
                 colors[j] = 0.5
 
@@ -178,7 +202,7 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, nbSearch):
                 vxs[i], vys[i] = vfa[0], vfa[1]
                 vxs[j], vys[j] = vfb[0], vfb[1]
 
-                # remove particles
+                # re-shift particles
                 xs[i] += t * vxs[i]
                 ys[i] += t * vys[i]
                 xs[j] += t * vxs[j]
@@ -228,8 +252,8 @@ def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
     :param d: circle's diameters
     :return: True if collision occurred, (and its time to remove), else False (and 0 time)
     """
-    #if abs(x2-x1) - d > abs((vx2 - vx1))*dt:
-    #    return False,0
+    if abs(x2 - x1) - d > abs((vx2 - vx1)) * dt:
+        return False, 0
 
     dvc = (vx2 - vx1) ** 2 + (vy2 - vy1) ** 2
     drc = (x2 - x1) ** 2 + (y2 - y1) ** 2
@@ -240,8 +264,8 @@ def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
     c = drc - d ** 2
     delta = b ** 2 - 4 * a * c
     if delta < 0:
-
         return False, 0.
+
     if delta >= 0:
         t = (-b + delta ** 0.5) / (2 * a)
         if t < 0 or t > dt:

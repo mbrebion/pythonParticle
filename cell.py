@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
 import numbaAccelerated
 import thermo
-import time
 
 INITSIZEEXTRARATIO = 1.2
 
@@ -18,6 +17,8 @@ RIGHT = 2
 
 
 class Cell:
+    meanFreePath = None
+    vStar = None
     nbPartTarget = None
     dt = None
     ds = None
@@ -29,6 +30,8 @@ class Cell:
     width = None
     length = None
     kbs = None
+    time = None
+    it = None
 
     @classmethod
     def thermodynamicSetup(cls, initTemp, length, width, initPressure, nbPartTarget):
@@ -58,9 +61,13 @@ class Cell:
         cls.ds = thermo.getDiameter(DIAMETER, cls.surface, H, cls.nbPartTarget, cls.initPressure, Kb, cls.initTemp)
 
         cls.vStar = thermo.getMeanSquareVelocity(cls.kbs, cls.ms, cls.initTemp)
+
         cls.meanFreePath = thermo.getMeanFreePathSimulated(cls.surface, cls.ds, cls.nbPartTarget)
-        cls.dt = thermo.getDtCollision(cls.vStar, cls.meanFreePath)  # time step is computed by global mean square velocity,
-        # which may be different from cell to cell
+        cls.dt = thermo.getDtCollision(cls.vStar, cls.meanFreePath)  # time step is computed by global mean
+        # square velocity, which may be different from cell to cell
+
+        cls.time = 0.
+        cls.it = 0
 
         print("%%%%%%%%%%%%%%%%%%")
 
@@ -80,13 +87,18 @@ class Cell:
         """
         Create a cell
         :param partRatio: ratio of particle (nbPart = nbPartTarget * ratio)
-        :param effectiveTemp: temperature required for this cell (May be different than Cell.initTemp)
+        :param effectiveTemp: temperature required for this cell (It may be different from Cell.initTemp)
         """
         self.nbPart = partRatio * Cell.nbPartTarget
         self.arraySize = int(self.nbPart * INITSIZEEXTRARATIO)
 
-        self.nbSearch = 5  # max index spacing between particles which may collide
-        # this value should be computed according to amount of parts and their sizes
+        self.histo = np.zeros(int(0.3 * self.nbPart ** 0.5), dtype=int)
+        # the amount of neighbors checked for collisions is adapted dynamically to ensure fast computations
+        # and miss less than 0.1 % of collisions
+
+        # time and iterations count
+        self.it = 0
+        self.time = 0
 
         # creation of arrays
         self.xs = np.empty(self.arraySize, dtype=float)
@@ -95,22 +107,18 @@ class Cell:
         self.vys = np.empty(self.arraySize, dtype=float)
         self.wheres = np.ones(self.arraySize, dtype=np.int8) * DEAD
         self.colors = np.zeros(self.arraySize, dtype=float)
+        self.positions = np.zeros((self.arraySize, 2), dtype=np.float)  # not used for computations but for opengl draws
 
-        self.positions = np.zeros((self.arraySize, 2), dtype=np.float)
-
+        # thermodynamic instant and averaged variables
         self.instantPressure = Cell.initPressure * partRatio
         self.averagedPressure = Cell.initPressure * partRatio
-
         self.temperature = effectiveTemp
-
-        self.nbCollision = 0
 
         # living particles
         indices = np.linspace(0, self.arraySize - 1, self.nbPart, dtype=np.int32)
         if self.nbPart != len(np.unique(indices)):
             print("bad particle number ", self.nbPart, self.arraySize)
             exit(1)
-
         self.wheres[indices] = LEFT
 
         # init of locations and velocities
@@ -153,7 +161,7 @@ class Cell:
         :return: None
         """
 
-        alpha = Cell.vStar * Cell.dt / Cell.length /10
+        alpha = Cell.vStar * Cell.dt / Cell.length / 10
         self.instantPressure = (fup + fdown) / (2 * Cell.length)
         self.averagedPressure = alpha * self.instantPressure + (1 - alpha) * self.averagedPressure
 
@@ -179,9 +187,9 @@ class Cell:
         nbNeighbour is the number of neighbours par particle i which are checked
         :return:
         """
-        nbNeighbour = 2*int(self.nbPart**0.5)
-        self.nbCollision += numbaAccelerated.detectAllCollisions(self.xs, self.ys, self.vxs, self.vys, self.wheres,
-                                                                 self.colors, Cell.dt, Cell.ds, nbNeighbour)
+
+        numbaAccelerated.detectAllCollisions(self.xs, self.ys, self.vxs, self.vys, self.wheres,
+                                             self.colors, Cell.dt, Cell.ds, self.histo)
 
     #######################################
 
@@ -189,6 +197,9 @@ class Cell:
         return numbaAccelerated.sortCell(self.xs, self.ys, self.vxs, self.vys, self.wheres, self.colors)
 
     def update(self):
+
+        Cell.it += 1  # to be moved upper once cells are gathered in broader class
+        Cell.time += Cell.dt
 
         self.advect()
 
@@ -200,7 +211,29 @@ class Cell:
 
         self.wallBounce()
 
+        if Cell.it % 1000 == 0:
+            self.improveSpeed()
 
+    def improveSpeed(self):
+        ln = len(self.histo)
+        nbZeros = ln - np.count_nonzero(self.histo) - 1
+        if nbZeros > 2:
+            # Too many neighbors are searched for nothing
+            self.histo = np.zeros(ln - nbZeros + 2, dtype=int)
+            return
+        sm = np.sum(self.histo)
+        expectedTail = int(sm * 1e-3)
+        if self.histo[-1] > expectedTail:
+            # here, we might miss somme collisions.
+            # statistic studies (not proved) tend to show that sum_(k+1,+oo)(histo) \approx histo(k)
+            # when k is big enough. Thus, we check here is un-detection rate remains below 0.1 %
+
+            more = int((np.log(self.histo[-1]) - np.log(expectedTail)) / np.log(2))
+            # estimation of additional neighbors to be checked
+            self.histo = np.zeros(ln + more, dtype=int)
+            return
+
+        self.histo *= 0
 
     def ouputBuffer(self):
         numbaAccelerated.twoArraysToOne(self.xs, self.ys, self.wheres, self.positions)
