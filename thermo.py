@@ -32,28 +32,25 @@ def getMeanFreePathSimulated(S,ds,Ns):
     :param Ns: number of simulated particle
     :return: average mean free path
     """
+
+
     return S/(2 * 2**0.5 * ds * Ns)
 
-def getDiameter(d,S,H,Ns,P,kb,T):
+def getDiameter(S,Ns,ls):
     """
-    compute the effective diameter of 2D particles to preserve ratio X = l / Delta x
-    where l in the mean free path and Delta x, the average distance between particles
-    :param d: real diameter for 3D gaz
+    compute the effective diameter of 2D particles to ensure a mean free path ls
     :param S: Surface of cell
-    :param H: length so that SH = V
     :param Ns: number of simulated particles
-    :param P: target pressure (in Pa)
-    :param kb: real Boltzmann constant
-    :param T: target temperature (in K)
+    :param ls: mean free path asked
 
-    :return: the effective diameter (in m)
+    :return: the diameter of simulated particle (in m)
     """
 
-    return pi/2 * d**2 * (S/Ns)**(1/2) * (P/(kb*T))**(2/3) * 10
+    return S / (4*2**0.5 * Ns * ls)
 
 def getMeanSquareVelocity(KbS ,ms,temperature):
     """
-    compute the mean square velocity
+    compute the mean square velocity (in 2D)
     :param KbS: boltzmann constant used in simulation
     :param ms: mass used in simulation
     :param temperature: real temperature
@@ -69,7 +66,7 @@ def getDtCollision(meanSquareVelocity,l):
     :param d: mean free path
     :return: optimal time step in order not to miss particle/particle collision
     """
-    return l / meanSquareVelocity * 0.02
+    return l / meanSquareVelocity * 0.1
 
 
 def getDtNoCollision(meanSquareVelocity,L):

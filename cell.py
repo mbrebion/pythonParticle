@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
 import numbaAccelerated
-import thermo
+import thermo, tracker
 
 INITSIZEEXTRARATIO = 1.2
 
@@ -32,23 +32,25 @@ class Cell:
     kbs = None
     time = None
     it = None
+    decoloringRatio = 0.85
 
     @classmethod
-    def thermodynamicSetup(cls, initTemp, length, width, initPressure, nbPartTarget):
+    def thermodynamicSetup(cls, initTemp, length, width, initPressure, nbPartTarget, ls):
         """
         Compute thermodynamic values common to all cells
         :param initTemp: mean temperature used in simulation (in K)
         :param length: length of cells (in m)
         :param width: width of cells (between walls)
         :param initPressure: mean pressure used in simulation (in Pa)
-         (pressure to be obtained with nbPartTarget particles)
-
+        (pressure to be obtained with nbPartTarget particles)
         :param nbPartTarget: target number of particle in cell
         (used to compute simulation values for mass, diameter and boltzmann constant)
         The actual number of particles may then differ in cells, resulting to mean pressure
          being different from the one provided.
+        :param ls: mean free path required (in m)
         :return: None
         """
+        cls.ls = ls
         cls.width = width
         cls.length = length
         cls.initTemp = initTemp
@@ -58,29 +60,26 @@ class Cell:
         cls.volume = cls.length * cls.width * H
         cls.kbs = thermo.getKbSimu(cls.initPressure, cls.volume, cls.initTemp, nbPartTarget)
         cls.ms = thermo.getMSimu(MASS, Kb, cls.kbs)
-        cls.ds = thermo.getDiameter(DIAMETER, cls.surface, H, cls.nbPartTarget, cls.initPressure, Kb, cls.initTemp)
+        cls.ds = thermo.getDiameter(cls.surface, cls.nbPartTarget, cls.ls)
 
         cls.vStar = thermo.getMeanSquareVelocity(cls.kbs, cls.ms, cls.initTemp)
 
-        cls.meanFreePath = thermo.getMeanFreePathSimulated(cls.surface, cls.ds, cls.nbPartTarget)
-        cls.dt = thermo.getDtCollision(cls.vStar, cls.meanFreePath)  # time step is computed by global mean
-        # square velocity, which may be different from cell to cell
+        cls.dt = thermo.getDtCollision(cls.vStar, cls.ls)
 
         cls.time = 0.
         cls.it = 0
 
-        print("%%%%%%%%%%%%%%%%%%")
-
+        print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
         print("Kbs = ", "{:.2e}".format(cls.kbs), "J/K")
         print("ms = ", "{:.2e}".format(cls.ms), "kg")
-        print("d = ", "{:.2e}".format(cls.ds), "m")
+        print("d = ", "{:.3e}".format(cls.ds), "m")
         print("v* = ", "{:.2e}".format(cls.vStar), "m/s")
         print("dOM/L = v*dt/L = ", "{:.2e}".format(cls.vStar * cls.dt / cls.length))
         print("dOM/d = v*dt/d = ", "{:.2e}".format(cls.vStar * cls.dt / cls.ds))
-        print("l : ", thermo.getMeanFreePathSimulated(cls.surface, cls.ds, cls.nbPartTarget), " m")
-        print("tau : ", thermo.getMeanFreePathSimulated(cls.surface, cls.ds, cls.nbPartTarget) / cls.vStar, " s")
-        print("dt : ", cls.dt, " s")
-        print("%%%%%%%%%%%%%%%%%%")
+        print("l : ", "{:.2e}".format(cls.ls), " m")
+        print("tau : ", "{:.2e}".format(cls.ls / cls.vStar), " s")
+        print("dt : ", "{:.2e}".format(cls.dt), " s")
+        print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
         print()
 
     def __init__(self, partRatio, effectiveTemp):
@@ -91,8 +90,8 @@ class Cell:
         """
         self.nbPart = partRatio * Cell.nbPartTarget
         self.arraySize = int(self.nbPart * INITSIZEEXTRARATIO)
-
-        self.histo = np.zeros(int(0.3 * self.nbPart ** 0.5), dtype=int)
+        nb = max(5, int(0.4 * self.nbPart ** 0.5) + 1)
+        self.histo = np.zeros(nb, dtype=int)
         # the amount of neighbors checked for collisions is adapted dynamically to ensure fast computations
         # and miss less than 0.1 % of collisions
 
@@ -105,9 +104,8 @@ class Cell:
         self.ys = np.empty(self.arraySize, dtype=float)
         self.vxs = np.empty(self.arraySize, dtype=float)
         self.vys = np.empty(self.arraySize, dtype=float)
-        self.wheres = np.ones(self.arraySize, dtype=np.int8) * DEAD
+        self.wheres = np.ones(self.arraySize, dtype=np.int32) * DEAD
         self.colors = np.zeros(self.arraySize, dtype=float)
-        self.positions = np.zeros((self.arraySize, 2), dtype=np.float)  # not used for computations but for opengl draws
 
         # thermodynamic instant and averaged variables
         self.instantPressure = Cell.initPressure * partRatio
@@ -119,10 +117,20 @@ class Cell:
         if self.nbPart != len(np.unique(indices)):
             print("bad particle number ", self.nbPart, self.arraySize)
             exit(1)
-        self.wheres[indices] = LEFT
+        self.wheres[indices] = range(1, self.nbPart + 1)
+
+        # output buffer
+        self.upToDate = False
+        self.positions = np.zeros((self.arraySize, 2), dtype=np.float)  # not used for computations but for opengl draws
 
         # init of locations and velocities
         self.randomInit(effectiveTemp)
+
+        # trackers
+        self.trackers = []
+
+    def addTracker(self, id):
+        self.trackers.append(tracker.Tracker(self, id))
 
     def randomInit(self, effectiveTemp):
         vStar = thermo.getMeanSquareVelocity(Cell.kbs, Cell.ms, effectiveTemp)
@@ -138,7 +146,7 @@ class Cell:
         self.vys /= ratio
 
         # locations and states
-        self.xs = (1 + np.random.random(self.arraySize)) * Cell.length / 2
+        self.xs = (np.random.random(self.arraySize)) * Cell.length
         for i in range(self.arraySize):
             self.ys[i] = (i + 0.5) * Cell.width / self.arraySize
 
@@ -147,11 +155,9 @@ class Cell:
     def advect(self):
         self.xs += self.vxs * Cell.dt
         self.ys += self.vys * Cell.dt
-        # self.vys -= 2000000 * Cell.dt
 
     def computeTemperature(self):
-        self.temperature = numbaAccelerated.computeAverageTemperature(self.vxs, self.vys, self.wheres, Cell.ms,
-                                                                      Cell.kbs)
+        self.temperature = numbaAccelerated.computeAverageTemperature(self.vxs, self.vys, self.wheres, Cell.ms, Cell.kbs)
 
     def computePressure(self, fup, fdown):
         """
@@ -167,17 +173,14 @@ class Cell:
 
     def wallBounce(self):
 
-        fup, fdown = numbaAccelerated.staticWallInterraction(self.ys, self.vys, self.wheres, Cell.width, Cell.dt,
-                                                             Cell.ms)
+        # up and down
+        fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.ys, self.vys, self.wheres, Cell.width, Cell.dt, Cell.ms)
         self.computePressure(fup, fdown)
 
         # left wall
-        self.vxs = np.where(self.xs > 0, self.vxs, -self.vxs)
-        self.xs = np.where(self.xs > 0, self.xs, - self.xs)
-
+        numbaAccelerated.staticWallInterractionLeft(self.xs, self.vxs, self.wheres, Cell.length)
         # right wall
-        self.vxs = np.where(self.xs < Cell.length, self.vxs, -self.vxs)
-        self.xs = np.where(self.xs < Cell.length, self.xs, 2 * Cell.length - self.xs)
+        numbaAccelerated.staticWallInterractionRight(self.xs, self.vxs, self.wheres, Cell.length)
 
     #######################################
 
@@ -188,18 +191,22 @@ class Cell:
         :return:
         """
 
-        numbaAccelerated.detectAllCollisions(self.xs, self.ys, self.vxs, self.vys, self.wheres,
-                                             self.colors, Cell.dt, Cell.ds, self.histo)
+        self.colors *= 0.92
+        numbaAccelerated.detectAllCollisions(self.xs, self.ys, self.vxs, self.vys, self.wheres, self.colors, Cell.dt, Cell.ds, self.histo)
 
     #######################################
 
     def sort(self):
         return numbaAccelerated.sortCell(self.xs, self.ys, self.vxs, self.vys, self.wheres, self.colors)
 
-    def update(self):
+    def updateConstants(self):
+        self.upToDate = False  # invalidate position buffer
 
         Cell.it += 1  # to be moved upper once cells are gathered in broader class
         Cell.time += Cell.dt
+        self.computeTemperature()
+
+    def update(self):
 
         self.advect()
 
@@ -207,12 +214,15 @@ class Cell:
 
         self.collide()
 
-        self.computeTemperature()
-
         self.wallBounce()
 
-        if Cell.it % 1000 == 0:
+        self.updateConstants()
+
+        if Cell.it % 100 == 0:
             self.improveSpeed()
+
+        for t in self.trackers:
+            t.doMeasures()
 
     def improveSpeed(self):
         ln = len(self.histo)
@@ -228,15 +238,18 @@ class Cell:
             # statistic studies (not proved) tend to show that sum_(k+1,+oo)(histo) \approx histo(k)
             # when k is big enough. Thus, we check here is un-detection rate remains below 0.1 %
 
-            more = int((np.log(self.histo[-1]) - np.log(expectedTail)) / np.log(2))
+            more = int((np.log(self.histo[-1] + 1) - np.log(expectedTail + 1)) / np.log(2))
             # estimation of additional neighbors to be checked
             self.histo = np.zeros(ln + more, dtype=int)
             return
 
-        self.histo *= 0
+        if np.sum(self.histo) > 20 * self.nbPart:
+            self.histo *= 0
 
-    def ouputBuffer(self):
-        numbaAccelerated.twoArraysToOne(self.xs, self.ys, self.wheres, self.positions)
+    def getPositionsBuffer(self):
+        if not self.upToDate:
+            numbaAccelerated.twoArraysToOne(self.xs, self.ys, self.wheres, self.positions)
+
         return self.positions
 
     def plot(self):

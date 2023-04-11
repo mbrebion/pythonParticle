@@ -1,5 +1,4 @@
-import numba
-from numba import jit, prange
+from numba import jit
 import numpy as np
 
 
@@ -11,6 +10,20 @@ def prettyPrint(values, mask):
         else:
             out += " " + str(values[i])[:4]
     return out
+
+
+@jit(nopython=True, cache=True)
+def retieveIndex(id, wheres):
+    """
+    find present index of particle id in particle arrays
+    :param id:
+    :param wheres : mask array containing list of indices
+    :return: index of particle id
+    """
+    for i in range(len(wheres)):
+        if wheres[i] == id:
+            return i
+    return -1
 
 
 ##############################################################
@@ -78,9 +91,49 @@ def sortCell(xs, ys, vxs, vys, wheres, colors):
 ################## Static wall interraction ##################
 ##############################################################
 
+@jit(nopython=True, cache=True, fastmath=True)
+def staticWallInterractionLeft(xs, vxs, wheres, length):
+    """
+        update coordinates and velocities of particles interacting left wall (is exists)
+
+        :param xs: array containing x coordinates of particles
+        :param vxs: array containing x velocities of particles
+        :param wheres: mask array
+        :param length: length of the cell (not used)
+        :return: None
+        """
+    for i in range(len(xs)):
+        if wheres[i] == 0:
+            continue
+
+        if xs[i] < 0:
+            xs[i] = -xs[i]
+            vxs[i] = - vxs[i]
+
 
 @jit(nopython=True, cache=True, fastmath=True)
-def staticWallInterraction(ys, vys, wheres, width, dt, m):
+def staticWallInterractionRight(xs, vxs, wheres, length):
+    """
+        update coordinates and velocities of particles interacting left wall (is exists)
+
+        :param xs: array containing x coordinates of particles
+        :param vxs: array containing x velocities of particles
+        :param wheres: mask array
+        :param length: length of the cell
+        :return: None
+        """
+
+    for i in range(len(xs)):
+        if wheres[i] == 0:
+            continue
+
+        if xs[i] > length:
+            xs[i] = 2 * length - xs[i]
+            vxs[i] = - vxs[i]
+
+
+@jit(nopython=True, cache=True, fastmath=True)
+def staticWallInterractionUpAndDown(ys, vys, wheres, width, dt, m):
     """
     update coordinates and velocities of particles interacting with solid walls (which are horizontal)
     Compute the forces applied to both walls
@@ -88,7 +141,7 @@ def staticWallInterraction(ys, vys, wheres, width, dt, m):
     :param ys: array containing y coordinates of particles
     :param vys: array containing y velocities of particles
     :param wheres: mask array
-    :param width: width if the cell
+    :param width: width of the cell
     :param dt: time step for simulation (all collision between particles and walls occurred within dt)
     :param m: mass of particles (all supposed equals)
     :return: fup,fdown, the two forces (computed positively)
@@ -143,7 +196,7 @@ def computeAverageTemperature(vxs, vys, wheres, m, kb):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True)
-def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d,  histo):
+def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo):
     """
     This method update particle positions and velocities taking into account elastic collisions
     It first tries to detect efficiently if collisions occurred,
@@ -159,10 +212,10 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d,  histo):
     :param dt: time step
     :param d: particle diameter
     :param histo: histogram of collisions detection according to j-i for storing purpose
-    :return: approximation of best nbSearch
+    :return: number of collisions
     """
     nbCollide = 0.
-    colors[:] = 0.
+    # colors[:] = 0.
     ra = np.array([0., 0.])
     rb = np.array([0., 0.])
     va = np.array([0., 0.])
@@ -182,12 +235,15 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d,  histo):
 
             if coll:
                 # record strategy
-                histo[j - i] +=1
+                histo[j - i] += 1
 
-                colors[i] = 0.5
-                colors[j] = 0.5
+                colors[i] = 1
+                colors[j] = 1
+
+                nbCollide += 1.
 
                 # restore locations before collision
+
                 xs[i] -= t * vxs[i]
                 ys[i] -= t * vys[i]
                 xs[j] -= t * vxs[j]
@@ -207,7 +263,7 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d,  histo):
                 ys[i] += t * vys[i]
                 xs[j] += t * vxs[j]
                 ys[j] += t * vys[j]
-                nbCollide += 1.
+
 
     return nbCollide
 
@@ -215,6 +271,11 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d,  histo):
 @jit(nopython=True, cache=True, fastmath=True)
 def dot(a, b):
     return a[0] * b[0] + a[1] * b[1]
+
+
+@jit(nopython=True, cache=True, fastmath=True)
+def norm(a):
+    return dot(a, a) ** 0.5
 
 
 @jit(nopython=True, cache=True, fastmath=True)
