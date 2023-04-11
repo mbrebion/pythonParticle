@@ -92,34 +92,34 @@ def sortCell(xs, ys, vxs, vys, wheres, colors):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True)
-def staticWallInterractionLeft(xs, vxs, wheres, length):
+def staticWallInterractionLeft(xs, vxs, wheres, left):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
         :param xs: array containing x coordinates of particles
         :param vxs: array containing x velocities of particles
         :param wheres: mask array
-        :param length: length of the cell (not used)
+        :param left: left coordinate of cell
         :return: None
         """
     for i in range(len(xs)):
         if wheres[i] == 0:
             continue
 
-        if xs[i] < 0:
-            xs[i] = -xs[i]
+        if xs[i] < left:
+            xs[i] = 2*left -xs[i]
             vxs[i] = - vxs[i]
 
 
 @jit(nopython=True, cache=True, fastmath=True)
-def staticWallInterractionRight(xs, vxs, wheres, length):
+def staticWallInterractionRight(xs, vxs, wheres, right):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
         :param xs: array containing x coordinates of particles
         :param vxs: array containing x velocities of particles
         :param wheres: mask array
-        :param length: length of the cell
+        :param right: right coordinate of cell
         :return: None
         """
 
@@ -127,8 +127,8 @@ def staticWallInterractionRight(xs, vxs, wheres, length):
         if wheres[i] == 0:
             continue
 
-        if xs[i] > length:
-            xs[i] = 2 * length - xs[i]
+        if xs[i] > right:
+            xs[i] = 2 * right - xs[i]
             vxs[i] = - vxs[i]
 
 

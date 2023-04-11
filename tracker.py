@@ -1,25 +1,27 @@
 import numbaAccelerated
 import cell
+from constants import *
 import numpy as np
 
 
 class Tracker:
 
-    def __init__(self, cell, pid, meanFreePath=True):
+    def __init__(self, domain, pid, meanFreePath=True):
         """
 
-        :param cell: cell in which the particle to track is located ; must be changed when multiple cells will be used
+        :param domain: domain containing the cell
         :param pid: id of the particle to track
         """
         self.id = pid
 
-        self.cell = cell
+        self.domain = domain
         self.currentIndex = None
+        self.currentCell = None
 
         self.meanFreePath = meanFreePath  # if true, measurement of mean free path and time is performed
 
         self._updateCurrentIndex()
-        x, y = self.cell.getPositionsBuffer()[self.currentIndex]
+        x, y = self.getPosition()
         pos = np.array([x, y])
         self.previousPosAtImpacts = [pos]  # positions of particle id right after impact
         self._invalidateCurrentIndex()
@@ -33,13 +35,23 @@ class Tracker:
 
     def _updateCurrentIndex(self):
         if self.currentIndex is None:
-            self.currentIndex = numbaAccelerated.retieveIndex(self.id, self.cell.wheres)
+            index, idCell = -1, -1
+            cell = None
+            while index == -1:
+                idCell += 1
+                cell = self.domain.cells[idCell]
+                index = numbaAccelerated.retieveIndex(self.id, cell.wheres)
+            self.currentCell = cell
+            self.currentIndex = index
+
+    def getPosition(self):
+        return self.currentCell.getPositionsBuffer()[self.currentIndex]
 
     def _hasCollidedRecently(self):
-        return self.cell.colors[self.currentIndex] > cell.Cell.decoloringRatio
+        return self.currentCell.colors[self.currentIndex] > ComputedConstants.decoloringRatio
 
     def _measureMeanFreePathAndTime(self):
-        x, y = self.cell.getPositionsBuffer()[self.currentIndex]
+        x, y = self.getPosition()
         pos = np.array([x, y])
 
         self.distance += numbaAccelerated.norm(pos - self.lastPos)
@@ -48,7 +60,7 @@ class Tracker:
         if self._hasCollidedRecently():
             self.previousPosAtImpacts.append(pos)
             self.ds.append(self.distance)
-            self.ts.append(cell.Cell.time)
+            self.ts.append(ComputedConstants.time)
             self.distance = 0
 
     def doMeasures(self):

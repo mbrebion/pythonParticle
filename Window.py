@@ -3,10 +3,10 @@ from glumpy import app, gl, gloo
 from glumpy.graphics.text import FontManager
 from glumpy.graphics.collections import GlyphCollection
 from glumpy.transforms import Position, OrthographicProjection
-import matplotlib.pyplot as plt
 from cell import Cell
+from domain import Domain
+from constants import ComputedConstants
 import warnings
-import numpy as np
 
 warnings.filterwarnings('ignore')
 
@@ -61,9 +61,9 @@ class Window:
         X = 0.1
         Y = 0.1
         ls = 6e-3
-        Cell.thermodynamicSetup(T, X, Y, P, nPart,ls)
-        self.cell = Cell(1, T)
-        Cell.dt /= 2
+        ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
+        self.domain = Domain(2)
+        ComputedConstants.dt /= 2
 
         # window
         self.resX = 1024
@@ -72,11 +72,12 @@ class Window:
         nTot = int(nPart * 1.2)
         self.program = gloo.Program(vertex, fragment, count=nTot)  # 1.2 for dead cells
 
-        self.program['position'] = self.cell.getPositionsBuffer()
-        self.program['radius'] = self.getRadius() / 2
+        self.program['radius'] = self.getRadius()
         self.program['resolution'] = self.resX, self.resY
-        self.program['color'] = self.cell.colors
         self.program['spaceLength'] = X, Y
+
+        self.updateProgram()
+
         self.t = 0
 
         self.window.on_resize = self.on_resize
@@ -89,18 +90,32 @@ class Window:
         self.createLabels()
 
         # add trackers
-        self.cell.addTracker(3*nPart//4)
-        self.cell.addTracker(nPart//2)
-        self.cell.addTracker(nPart//4)
+        self.domain.addTracker(3 * nPart // 4)
+        self.domain.addTracker(nPart // 2)
+        self.domain.addTracker(nPart // 4)
 
         app.run()
 
-        for t in self.cell.trackers:
+        for t in self.domain.trackers:
             l, ul, tl, utl = t.getMeanFreePathresults()
             print("Particle ", t.id, " : ")
             print("l = ", "{:.2e}".format(l), " +/- ", "{:.2e}".format(ul), " m")
             print("tl = ", "{:.2e}".format(tl), " +/- ", "{:.2e}".format(utl), " s")
             print()
+
+    def updateProgram(self):
+        start = 0
+        for i in range(len(self.domain.cells)):
+            cell = self.domain.cells[i]
+            nb = cell.arraySize
+
+            self.program['position'][start:start+nb] = cell.getPositionsBuffer()
+            self.program['color'][start:start+nb] = cell.colors
+            start += nb
+
+
+
+
 
     def createLabels(self):
         self.labels = GlyphCollection(transform=OrthographicProjection(Position()))
@@ -120,7 +135,7 @@ class Window:
 
         # textT = " T = " + str(self.cell.temperature)[0:5] + " K"
         # textP = " P = " + str(self.cell.averagedPressure)[0:5] + " Pa"
-        textRatio = " C. Ratio = " + str(int(self.duration / Cell.dt))
+        textRatio = " C. Ratio = " + str(int(self.duration / ComputedConstants.dt))
         textDuration = " C. time = " + "{:.2e}".format(self.duration * 1000) + " ms"
 
         # self.labels.append(textT, self.regular, origin=(25, 110, 0), scale=0.8, anchor_x="left")
@@ -129,7 +144,7 @@ class Window:
         self.labels.append(textDuration, self.regular, origin=(25, 70, 0), scale=0.8, anchor_x="left")
 
     def getRadius(self):
-        return self.cell.ds / self.cell.length * self.resX
+        return ComputedConstants.ds / ComputedConstants.length * self.resX / 2
 
     def on_resize(self, width, height):
         self.resX = width
@@ -149,19 +164,18 @@ class Window:
         tInit = time.perf_counter()
 
         for i in range(nStep):
-            self.cell.update()
+            self.domain.update()
 
         self.duration = (time.perf_counter() - tInit) / nStep * alpha + (1 - alpha) * self.duration
 
-        self.program['position'] = self.cell.getPositionsBuffer()
-        self.program['color'] = self.cell.colors
+        self.updateProgram()
 
         if self.timeStep % 30 == 0:
             self.updateLabels()
             pass
 
 
-window = Window(120, 1e5, 300)
+window = Window(200, 1e5, 300)
 
 # todolist :
 #  - compute thermodynamic values such as l (mean free path)
