@@ -1,3 +1,4 @@
+import constants
 from cell import Cell
 from constants import *
 import tracker
@@ -14,7 +15,7 @@ class Domain:
         if effectiveTemp is None:
             effectiveTemp = [ComputedConstants.initTemp for _ in range(nbCells)]
 
-        nbParts = [ int(ComputedConstants.nbPartTarget * ratios[i]) for i in range(nbCells)]
+        nbParts = [int(ComputedConstants.nbPartTarget * ratios[i]) for i in range(nbCells)]
 
         # cells creation
         self.cells = []
@@ -49,5 +50,13 @@ class Domain:
         for c in self.cells:
             c.update()
 
-        for t in self.trackers:
-            t.doMeasures()
+        for c in self.cells:
+            c.prepareSwap()
+
+        for c in self.cells:
+            c.applySwap()
+
+        # for t in self.trackers:
+        #    t.doMeasures()
+
+        # print("c1 : ", self.cells[0].count(), " c2 : ", self.cells[1].count(), " total : ", self.cells[1].count() + self.cells[0].count())

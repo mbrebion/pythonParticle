@@ -40,7 +40,7 @@ class Tracker:
             while index == -1:
                 idCell += 1
                 cell = self.domain.cells[idCell]
-                index = numbaAccelerated.retieveIndex(self.id, cell.wheres)
+                index = numbaAccelerated.retieveIndex(self.id, cell.coords.wheres)
             self.currentCell = cell
             self.currentIndex = index
 
@@ -48,7 +48,7 @@ class Tracker:
         return self.currentCell.getPositionsBuffer()[self.currentIndex]
 
     def _hasCollidedRecently(self):
-        return self.currentCell.colors[self.currentIndex] > ComputedConstants.decoloringRatio
+        return self.currentCell.coords.colors[self.currentIndex] > ComputedConstants.decoloringRatio
 
     def _measureMeanFreePathAndTime(self):
         x, y = self.getPosition()

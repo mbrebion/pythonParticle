@@ -3,13 +3,14 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
 import numbaAccelerated
 from constants import *
+from coords import Coords
 
 INITSIZEEXTRARATIO = 1.2
 
 
 class Cell:
 
-    def __init__(self, nbPart, effectiveTemp, left, right,startIndex):
+    def __init__(self, nbPart, effectiveTemp, left, right, startIndex):
         """
         Create a cell
         :param nbPart: effective number of part in cell
@@ -36,12 +37,12 @@ class Cell:
         self.time = 0
 
         # creation of arrays
-        self.xs = np.empty(self.arraySize, dtype=float)
-        self.ys = np.empty(self.arraySize, dtype=float)
-        self.vxs = np.empty(self.arraySize, dtype=float)
-        self.vys = np.empty(self.arraySize, dtype=float)
-        self.wheres = np.ones(self.arraySize, dtype=np.int32) * DEAD
-        self.colors = np.zeros(self.arraySize, dtype=float)
+        self.coords = Coords(self.arraySize)
+
+        # creation of swap arrays
+        swapSize = int(0.2 * self.arraySize)
+        self.leftSwap = Coords(swapSize)
+        self.rightSwap = Coords(swapSize)
 
         # thermodynamic instant and averaged variables
         self.instantPressure = ComputedConstants.initPressure * nbPart / ComputedConstants.initPressure * ComputedConstants.nbCells
@@ -54,8 +55,8 @@ class Cell:
         if self.nbPart != len(np.unique(indices)):
             print("bad particle number ", self.nbPart, self.arraySize)
             exit(1)
-        self.wheres[indices] = range(1, self.nbPart + 1)
-        self.wheres[indices] += self.startIndex
+        self.coords.wheres[indices] = range(1, self.nbPart + 1)
+        self.coords.wheres[indices] += self.startIndex
 
         # output buffer
         self.upToDate = False
@@ -71,29 +72,30 @@ class Cell:
     def randomInit(self, effectiveTemp):
         vStar = thermo.getMeanSquareVelocity(ComputedConstants.kbs, ComputedConstants.ms, effectiveTemp)
 
-        self.vxs = np.random.normal(0, vStar / 2 ** 0.5, self.arraySize)
-        self.vys = np.random.normal(0, vStar / 2 ** 0.5, self.arraySize)
+        self.coords.vxs = np.random.normal(0, vStar / 2 ** 0.5, self.arraySize)
+        self.coords.vys = np.random.normal(0, vStar / 2 ** 0.5, self.arraySize)
 
         # enforce true temperature
-        indices = np.nonzero(self.wheres != DEAD)
-        vStarComputed = (np.average(self.vxs[indices] ** 2 + self.vys[indices] ** 2)) ** 0.5
+        indices = np.nonzero(self.coords.wheres != DEAD)
+        vStarComputed = (np.average(self.coords.vxs[indices] ** 2 + self.coords.vys[indices] ** 2)) ** 0.5
         ratio = (vStarComputed / vStar)
-        self.vxs /= ratio
-        self.vys /= ratio
+        self.coords.vxs /= ratio
+        self.coords.vys /= ratio
 
         # locations and states
-        self.xs = self.left + (np.random.random(self.arraySize)) * self.length
+        self.coords.xs = self.left + (np.random.random(self.arraySize)) * self.length
         for i in range(self.arraySize):
-            self.ys[i] = (i + 0.5) * ComputedConstants.width / self.arraySize
+            self.coords.ys[i] = (i + 0.5) * ComputedConstants.width / self.arraySize
 
         self.sort()
 
     def advect(self):
-        self.xs += self.vxs * ComputedConstants.dt
-        self.ys += self.vys * ComputedConstants.dt
+        self.coords.xs += self.coords.vxs * ComputedConstants.dt
+        self.coords.ys += self.coords.vys * ComputedConstants.dt
 
     def computeTemperature(self):
-        self.temperature = numbaAccelerated.computeAverageTemperature(self.vxs, self.vys, self.wheres, ComputedConstants.ms, ComputedConstants.kbs)
+        self.temperature = numbaAccelerated.computeAverageTemperature(self.coords.vxs, self.coords.vys, self.coords.wheres, ComputedConstants.ms,
+                                                                      ComputedConstants.kbs)
 
     def computePressure(self, fup, fdown):
         """
@@ -108,18 +110,67 @@ class Cell:
         self.averagedPressure = alpha * self.instantPressure + (1 - alpha) * self.averagedPressure
 
     def wallBounce(self):
-
         # up and down
-        fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.ys, self.vys, self.wheres, ComputedConstants.width, ComputedConstants.dt,
+        fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.coords.ys, self.coords.vys, self.coords.wheres, ComputedConstants.width,
+                                                                      ComputedConstants.dt,
                                                                       ComputedConstants.ms)
         self.computePressure(fup, fdown)
 
         # left wall
-        numbaAccelerated.staticWallInterractionLeft(self.xs, self.vxs, self.wheres, self.left)
-        # right wall
-        numbaAccelerated.staticWallInterractionRight(self.xs, self.vxs, self.wheres, self.right)
+        if self.leftCell is None:
+            numbaAccelerated.staticWallInterractionLeft(self.coords.xs, self.coords.vxs, self.coords.wheres, self.left)
 
-    #######################################
+        # right wall
+        if self.rightCell is None:
+            numbaAccelerated.staticWallInterractionRight(self.coords.xs, self.coords.vxs, self.coords.wheres, self.right)
+
+    ##############################################################
+    ####################          Swapping        ################
+    ##############################################################
+
+
+
+    def applySwap(self):
+        """
+        swap particles between cells when necessary
+        :return: None
+        """
+        if self.leftCell is not None:
+            self.leftSwap.emptySelfInOther(self.leftCell.coords)
+
+        if self.rightCell is not None:
+            self.rightSwap.emptySelfInOther(self.rightCell.coords)
+
+    def prepareSwap(self):
+        """
+        identify particles to be swapped
+        :return: None
+        """
+        if self.leftCell is not None:
+            self._swapToLeft()
+
+        if self.rightCell is not None:
+            self._swapToRight()
+
+    def _swapToLeft(self):
+        indices = np.where(self.coords.xs < self.left)[0]
+        self.leftSwap.wheres[:] = DEAD
+
+        for i in indices:
+            if self.coords.wheres[i] == DEAD:
+                continue
+            self.coords.copyAndKillParticle(i, self.leftSwap)
+
+    def _swapToRight(self):
+        indices = np.where(self.coords.xs > self.right)[0]
+        self.rightSwap.wheres[:] = DEAD
+
+        for i in indices:
+            if self.coords.wheres[i] == DEAD:
+                continue
+            self.coords.copyAndKillParticle(i, self.rightSwap)
+
+    ##############################################################
 
     def collide(self):
         """
@@ -128,14 +179,16 @@ class Cell:
         :return:
         """
 
-        self.colors *= 0.92
-        numbaAccelerated.detectAllCollisions(self.xs, self.ys, self.vxs, self.vys, self.wheres, self.colors, ComputedConstants.dt, ComputedConstants.ds,
+        self.coords.colors *= 0.92
+        numbaAccelerated.detectAllCollisions(self.coords.xs, self.coords.ys, self.coords.vxs, self.coords.vys, self.coords.wheres, self.coords.colors,
+                                             ComputedConstants.dt,
+                                             ComputedConstants.ds,
                                              self.histo)
 
     #######################################
 
     def sort(self):
-        return numbaAccelerated.sortCell(self.xs, self.ys, self.vxs, self.vys, self.wheres, self.colors)
+        return self.coords.sort()
 
     def updateConstants(self):
         self.upToDate = False  # invalidate position buffer
@@ -143,7 +196,6 @@ class Cell:
         self.computeTemperature()
 
     def update(self):
-
         self.advect()
 
         self.sort()
@@ -179,16 +231,19 @@ class Cell:
         if np.sum(self.histo) > 20 * self.nbPart:
             self.histo *= 0
 
+    def count(self):
+        return numbaAccelerated.countAlive(self.coords.wheres)
+
     def getPositionsBuffer(self):
         if not self.upToDate:
-            numbaAccelerated.twoArraysToOne(self.xs, self.ys, self.wheres, self.positions)
+            numbaAccelerated.twoArraysToOne(self.coords.xs, self.coords.ys, self.coords.wheres, self.positions)
 
         return self.positions
 
     def plot(self):
         # plot using matplotlib
 
-        indices = np.nonzero(self.wheres != DEAD)
+        indices = np.nonzero(self.coords.wheres != DEAD)
 
         plt.rcParams["figure.figsize"] = [7.50, 7.50]
         plt.rcParams["figure.autolayout"] = True
@@ -204,7 +259,7 @@ class Cell:
         plt.ylim(0, ComputedConstants.width)
         circles = []
         for i in indices[0]:
-            circles.append(plt.Circle((self.xs[i], self.ys[i]), ComputedConstants.ds))
+            circles.append(plt.Circle((self.coords.xs[i], self.coords.ys[i]), ComputedConstants.ds))
 
         p = PatchCollection(circles)
         p.set_color("r")
@@ -215,11 +270,11 @@ class Cell:
         plt.xlabel("vx")
         plt.ylabel("count")
 
-        plt.hist(self.vxs[indices], bins='auto')
+        plt.hist(self.coords.vxs[indices], bins='auto')
 
         plt.subplot(223)
         plt.xlabel("vy")
         plt.ylabel("count")
-        plt.hist(self.vys[indices], bins='auto')
+        plt.hist(self.coords.vys[indices], bins='auto')
 
         plt.show()

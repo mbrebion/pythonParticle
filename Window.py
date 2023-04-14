@@ -3,7 +3,6 @@ from glumpy import app, gl, gloo
 from glumpy.graphics.text import FontManager
 from glumpy.graphics.collections import GlyphCollection
 from glumpy.transforms import Position, OrthographicProjection
-from cell import Cell
 from domain import Domain
 from constants import ComputedConstants
 import warnings
@@ -63,7 +62,7 @@ class Window:
         ls = 6e-3
         ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
         self.domain = Domain(2)
-        ComputedConstants.dt /= 2
+        ComputedConstants.dt *= 0.5
 
         # window
         self.resX = 1024
@@ -110,7 +109,7 @@ class Window:
             nb = cell.arraySize
 
             self.program['position'][start:start+nb] = cell.getPositionsBuffer()
-            self.program['color'][start:start+nb] = cell.colors
+            self.program['color'][start:start+nb] = cell.coords.colors
             start += nb
 
 
@@ -175,7 +174,7 @@ class Window:
             pass
 
 
-window = Window(200, 1e5, 300)
+window = Window(1000, 1e5, 300)
 
 # todolist :
 #  - compute thermodynamic values such as l (mean free path)

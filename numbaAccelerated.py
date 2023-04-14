@@ -31,6 +31,42 @@ def retieveIndex(id, wheres):
 ##############################################################
 
 @jit(nopython=True, cache=True)
+def goodIndexToInsertTo(y, ys, wheres, start):
+    """
+
+    :param y: y of target particle
+    :param ys: ys of already present particles
+    :param wheres: masks
+    :param start: starting index
+    :return: the next best index to insert particle at
+    """
+
+    index = start
+    while index < len(ys) and ys[index] < y:
+        index += 1
+
+    while index < len(ys) and wheres[index] != 0:
+        index += 1
+
+    if index >= len(ys):
+        # end of the list, search dead particle backward
+        index = len(ys) - 1
+        while wheres[index] != 0:
+            index -= 1
+
+    return index
+
+
+@jit(nopython=True, cache=True)
+def countAlive(wheres):
+    count = 0
+    for i in range(len(wheres)):
+        if wheres[i] > 0:
+            count += 1
+    return count
+
+
+@jit(nopython=True, cache=True)
 def roll1(i, ar1, ar2, ar3, ar4, ar5, ar6):
     """
     set values formerly at index i-1 to index i for 5 arrays
@@ -66,17 +102,13 @@ def sortCell(xs, ys, vxs, vys, wheres, colors):
 
     for i in range(1, len(ys)):
 
-        if wheres[i] == 0:
-            # we do not sort a dead value
-            continue
-
         value = ys[i]  # assumed to be alive
 
         swaps = 0
         j = i - 1
         x, y, vx, vy, where, color = xs[i], ys[i], vxs[i], vys[i], wheres[i], colors[i]
 
-        while (value < ys[j] or wheres[j] == 0) and j >= 0:
+        while value < ys[j] and j >= 0:
             roll1(j + 1, xs, ys, vxs, vys, wheres, colors)
             swaps += 1
             j = j - 1
@@ -107,7 +139,7 @@ def staticWallInterractionLeft(xs, vxs, wheres, left):
             continue
 
         if xs[i] < left:
-            xs[i] = 2*left -xs[i]
+            xs[i] = 2 * left - xs[i]
             vxs[i] = - vxs[i]
 
 
@@ -263,7 +295,6 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo):
                 ys[i] += t * vys[i]
                 xs[j] += t * vxs[j]
                 ys[j] += t * vys[j]
-
 
     return nbCollide
 
