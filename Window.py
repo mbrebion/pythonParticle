@@ -59,9 +59,12 @@ class Window:
         # simulation
         X = 0.1
         Y = 0.1
-        ls = 6e-3
+        ls = 5e-3
         ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
-        self.domain = Domain(2)
+
+        #self.domain = Domain(4, effectiveTemp=[250, 250, 350, 350])
+        self.domain = Domain(1)
+
         ComputedConstants.dt *= 0.5
 
         # window
@@ -108,13 +111,9 @@ class Window:
             cell = self.domain.cells[i]
             nb = cell.arraySize
 
-            self.program['position'][start:start+nb] = cell.getPositionsBuffer()
-            self.program['color'][start:start+nb] = cell.coords.colors
+            self.program['position'][start:start + nb] = cell.getPositionsBuffer()
+            self.program['color'][start:start + nb] = cell.coords.colors
             start += nb
-
-
-
-
 
     def createLabels(self):
         self.labels = GlyphCollection(transform=OrthographicProjection(Position()))
@@ -158,12 +157,15 @@ class Window:
         self.program.draw(gl.GL_POINTS)
         self.labels.draw()
 
-        alpha = 0.05
-        nStep = 1
+        alpha = 0.02
+        nStep = 10
         tInit = time.perf_counter()
 
         for i in range(nStep):
             self.domain.update()
+
+        #if self.timeStep % 30 == 0:
+        #    self.domain.printTemperatures()
 
         self.duration = (time.perf_counter() - tInit) / nStep * alpha + (1 - alpha) * self.duration
 
@@ -174,7 +176,7 @@ class Window:
             pass
 
 
-window = Window(1000, 1e5, 300)
+window = Window(5000, 1e5, 300)
 
 # todolist :
 #  - compute thermodynamic values such as l (mean free path)

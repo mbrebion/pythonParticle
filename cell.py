@@ -27,7 +27,8 @@ class Cell:
 
         self.nbPart = nbPart
         self.arraySize = int(self.nbPart * INITSIZEEXTRARATIO)
-        nb = max(5, int(0.4 * self.nbPart ** 0.5) + 1)
+        nb = max(self.nbPart // 100,20)
+        #nb =self.nbPart*2
         self.histo = np.zeros(nb, dtype=int)
         # the amount of neighbors checked for collisions is adapted dynamically to ensure fast computations
         # and miss less than 0.1 % of collisions
@@ -40,7 +41,7 @@ class Cell:
         self.coords = Coords(self.arraySize)
 
         # creation of swap arrays
-        swapSize = int(0.2 * self.arraySize)
+        swapSize = int(0.05 * self.arraySize)
         self.leftSwap = Coords(swapSize)
         self.rightSwap = Coords(swapSize)
 
@@ -89,6 +90,8 @@ class Cell:
 
         self.sort()
 
+        self.coords.updateTuple()
+
     def advect(self):
         self.coords.xs += self.coords.vxs * ComputedConstants.dt
         self.coords.ys += self.coords.vys * ComputedConstants.dt
@@ -128,47 +131,27 @@ class Cell:
     ####################          Swapping        ################
     ##############################################################
 
-
-
     def applySwap(self):
         """
         swap particles between cells when necessary
         :return: None
         """
         if self.leftCell is not None:
-            self.leftSwap.emptySelfInOther(self.leftCell.coords)
+            numbaAccelerated.moveSwapToNeighbor(*self.leftSwap.tpl, *self.leftCell.coords.tpl, self.leftSwap.alive, ComputedConstants.width)
 
         if self.rightCell is not None:
-            self.rightSwap.emptySelfInOther(self.rightCell.coords)
+            numbaAccelerated.moveSwapToNeighbor(*self.rightSwap.tpl, *self.rightCell.coords.tpl, self.rightSwap.alive, ComputedConstants.width)
 
     def prepareSwap(self):
         """
-        identify particles to be swapped
+        identify particles to be swapped and move them to swap arrays
         :return: None
         """
         if self.leftCell is not None:
-            self._swapToLeft()
+            self.leftSwap.alive = numbaAccelerated.moveToSwap(*self.coords.tpl, *self.leftSwap.tpl, self.left, False)
 
         if self.rightCell is not None:
-            self._swapToRight()
-
-    def _swapToLeft(self):
-        indices = np.where(self.coords.xs < self.left)[0]
-        self.leftSwap.wheres[:] = DEAD
-
-        for i in indices:
-            if self.coords.wheres[i] == DEAD:
-                continue
-            self.coords.copyAndKillParticle(i, self.leftSwap)
-
-    def _swapToRight(self):
-        indices = np.where(self.coords.xs > self.right)[0]
-        self.rightSwap.wheres[:] = DEAD
-
-        for i in indices:
-            if self.coords.wheres[i] == DEAD:
-                continue
-            self.coords.copyAndKillParticle(i, self.rightSwap)
+            self.rightSwap.alive = numbaAccelerated.moveToSwap(*self.coords.tpl, *self.rightSwap.tpl, self.right, True)
 
     ##############################################################
 
@@ -176,11 +159,11 @@ class Cell:
         """
         Compute collisions between particles
         nbNeighbour is the number of neighbours par particle i which are checked
-        :return:
+        :return: None
         """
 
-        self.coords.colors *= 0.92
-        numbaAccelerated.detectAllCollisions(self.coords.xs, self.coords.ys, self.coords.vxs, self.coords.vys, self.coords.wheres, self.coords.colors,
+        self.coords.colors *= ComputedConstants.decoloringRatio
+        numbaAccelerated.detectAllCollisions(*self.coords.tpl,
                                              ComputedConstants.dt,
                                              ComputedConstants.ds,
                                              self.histo)
@@ -206,10 +189,32 @@ class Cell:
 
         self.updateConstants()
 
-        if ComputedConstants.it % 100 == 0:
+        if ComputedConstants.it % 1500 == 0:
             self.improveSpeed()
 
     def improveSpeed(self):
+        ln = len(self.histo)
+        h = np.array(self.histo,dtype=float)
+        h /= np.sum(h)
+        h *= 100
+        k = 1
+        for i in range(1, ln):
+            if h[i] > h[1] / 4:
+                k = i
+
+        k = min(int(ln * 0.8), k)  # safeguard
+        Sk = 0
+        for i in range(k, ln):
+            Sk += h[i]
+        xk = 1 - h[k] / Sk
+
+        DeltaMax = int(0.5 + k + np.log(0.1 / Sk) / np.log(xk))
+
+        self.histo = np.zeros(DeltaMax, dtype=int)
+        print(DeltaMax)
+
+
+    def improveSpeedOld(self):
         ln = len(self.histo)
         nbZeros = ln - np.count_nonzero(self.histo) - 1
         if nbZeros > 2:
@@ -239,6 +244,13 @@ class Cell:
             numbaAccelerated.twoArraysToOne(self.coords.xs, self.coords.ys, self.coords.wheres, self.positions)
 
         return self.positions
+
+    def printHisto(self):
+        out = "["
+        for v in self.histo:
+            out += str(v) + ","
+        out = out[0:-1] + "]"
+        return out
 
     def plot(self):
         # plot using matplotlib

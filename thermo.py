@@ -34,7 +34,7 @@ def getMeanFreePathSimulated(S,ds,Ns):
     """
 
 
-    return S/(2 * 2**0.5 * ds * Ns)
+    return S/(4 * 2**0.5 * ds * Ns)
 
 def getDiameter(S,Ns,ls):
     """
@@ -66,7 +66,7 @@ def getDtCollision(meanSquareVelocity,l):
     :param d: mean free path
     :return: optimal time step in order not to miss particle/particle collision
     """
-    return l / meanSquareVelocity * 0.1
+    return l / meanSquareVelocity * 0.05
 
 
 def getDtNoCollision(meanSquareVelocity,L):

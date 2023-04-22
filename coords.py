@@ -13,35 +13,18 @@ class Coords:
         self.wheres = np.ones(size, dtype=np.int32) * DEAD
         self.colors = np.zeros(size, dtype=float)
 
+        self.indices = np.zeros(size, dtype=np.int32)
+
+        self.alive = 0
+
+        self.updateTuple()
+
+    def updateTuple(self):
+        self.tpl = self.xs, self.ys, self.vxs, self.vys, self.wheres, self.colors
+
     def sort(self):
         numbaAccelerated.sortCell(self.xs, self.ys, self.vxs, self.vys, self.wheres, self.colors)
 
-    def addParticle(self, x, y, vx, vy, where, color):
-        index = numbaAccelerated.goodIndexToInsertTo(y, self.ys, self.wheres, 0)
-        self.xs[index] = x
-        self.ys[index] = y
-        self.vxs[index] = vx
-        self.vys[index] = vy
-        self.colors[index] = color
-        self.wheres[index] = where
-
-    def copyAndKillParticle(self, i, other):
-
-        other.addParticle(self.xs[i], self.ys[i], self.vxs[i], self.vys[i], self.wheres[i], self.colors[i])
-
-        self.wheres[i] = DEAD
-        # new y ensure this particle won't move too much in list while sorting
-        self.ys[i] = (i + 0.5) / len(self.xs) * ComputedConstants.width
-        self.vxs[i] = 0.
-        self.vys[i] = 0.
-        self.colors[i] = 0.
-        self.xs[i] = -1.
-
-    def emptySelfInOther(self, other):
-        self.sort()
-
-        for i in range(len(self.xs)):
-            if self.wheres[i] == DEAD:
-                continue
-
-            self.copyAndKillParticle(i, other)
+    def resetSwap(self):
+        self.wheres[:] = DEAD
+        self.alive = 0

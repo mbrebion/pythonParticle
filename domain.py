@@ -1,4 +1,3 @@
-import constants
 from cell import Cell
 from constants import *
 import tracker
@@ -6,7 +5,7 @@ import tracker
 
 class Domain:
 
-    def __init__(self, nbCells, ratios=None, effectiveTemp=None):
+    def __init__(self, nbCells,*, ratios=None, effectiveTemp=None):
         ComputedConstants.nbCells = nbCells
 
         if ratios is None:
@@ -40,6 +39,11 @@ class Domain:
         # trackers
         self.trackers = []
 
+    def printTemperatures(self):
+        for cell in self.cells:
+            cell.computeTemperature()
+            print(cell.temperature)
+
     def addTracker(self, id):
         self.trackers.append(tracker.Tracker(self, id))
 
@@ -49,6 +53,7 @@ class Domain:
 
         for c in self.cells:
             c.update()
+
 
         for c in self.cells:
             c.prepareSwap()

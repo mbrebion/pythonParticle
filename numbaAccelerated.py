@@ -12,6 +12,63 @@ def prettyPrint(values, mask):
     return out
 
 
+##############################################################
+###################### Particle Swapping #####################
+##############################################################
+
+@jit(nopython=True, cache=True)
+def fromAtoB(ia, ib, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb):
+    # swap
+
+    xsb[ib] = xsa[ia]
+    ysb[ib] = ysa[ia]
+    vxsb[ib] = vxsa[ia]
+    vysb[ib] = vysa[ia]
+    wheresb[ib] = wheresa[ia]
+    colorsb[ib] = colorsa[ia]
+
+    # reset
+    vxsa[ia] = 0.
+    vysa[ia] = 0.
+    wheresa[ia] = 0
+
+
+@jit(nopython=True, cache=True)
+def moveToSwap(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb, xLim, kindOfLim):
+    """
+    Move particles from a coordinates to b coordinates (swap if needed) and return the amount of particle moved
+    :param xLim: x left or right limit
+    :param kindOfLim: if True, limit is at right side, if False, at Left side
+    :return: the amount of particle moved
+    """
+    count = 0
+    if kindOfLim:
+        for i in range(len(xsa)):
+            if xsa[i] > xLim and wheresa[i] > 0:
+                fromAtoB(i, count, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
+                count += 1
+    else:
+        for i in range(len(xsa)):
+            if xsa[i] < xLim and wheresa[i] > 0:
+                fromAtoB(i, count, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
+                count += 1
+
+    return count
+
+
+@jit(nopython=True, cache=True)
+def moveSwapToNeighbor(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb, amount, ymax):
+    """
+    Move particles from swap a to other cell b
+    :param amount: number of particle to be moved
+    :param ymax: max y coordinate of cells
+    :return: None
+    """
+    for i in range(amount):
+        bestIndex = goodIndexToInsertTo(ysa[i], ysb, wheresb, ymax)
+        fromAtoB(i, bestIndex, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
+
+
 @jit(nopython=True, cache=True)
 def retieveIndex(id, wheres):
     """
@@ -30,18 +87,20 @@ def retieveIndex(id, wheres):
 ###################### Sorting algorithm #####################
 ##############################################################
 
+
 @jit(nopython=True, cache=True)
-def goodIndexToInsertTo(y, ys, wheres, start):
+def goodIndexToInsertTo(y, ys, wheres, ymax):
     """
 
     :param y: y of target particle
     :param ys: ys of already present particles
     :param wheres: masks
-    :param start: starting index
+    :param ymax: max value of y
     :return: the next best index to insert particle at
     """
 
-    index = start
+    index = int(y / ymax * len(ys))  # guess for best index
+
     while index < len(ys) and ys[index] < y:
         index += 1
 
@@ -51,7 +110,7 @@ def goodIndexToInsertTo(y, ys, wheres, start):
     if index >= len(ys):
         # end of the list, search dead particle backward
         index = len(ys) - 1
-        while wheres[index] != 0:
+        while index >= 0 and wheres[index] != 0:
             index -= 1
 
     return index
@@ -195,6 +254,54 @@ def staticWallInterractionUpAndDown(ys, vys, wheres, width, dt, m):
             fup += abs(vys[i])  # f = -2 * vy * ms * dn / dt
 
     return fdown * 2 * m / dt, fup * 2 * m / dt
+
+
+##############################################################
+#######################  Swapping  ###########################
+##############################################################
+
+@jit(nopython=True, cache=True, fastmath=True)
+def indicesToSwapRight(xs, xmax, wheres, indices):
+    """
+    retrieve the indices of particle which must be swapped to right and store therm to indices
+    :param xs: x coordinates
+    :param xmax: end of cell coordinate
+    :param wheres: mask
+    :param indices: output array
+    :return: Number of particle to swap
+    """
+
+    for i in range(len(indices)):
+        indices[i] = 0
+    newIndex = 0
+
+    for i in range(len(xs)):
+        if xs[i] > xmax and wheres[i] > 0:
+            indices[newIndex] = i
+            newIndex += 1
+    return newIndex
+
+
+@jit(nopython=True, cache=True, fastmath=True)
+def indicesToSwapLeft(xs, xmin, wheres, indices):
+    """
+    retrieve the indices of particle which must be swapped to right and store therm to indices
+    :param xs: x coordinates
+    :param xmin: begin of cell coordinate
+    :param wheres: mask
+    :param indices: output array
+    :return: Number of particle to swap
+    """
+
+    for i in range(len(indices)):
+        indices[i] = 0
+    newIndex = 0
+
+    for i in range(len(xs)):
+        if xs[i] < xmin and wheres[i] > 0:
+            indices[newIndex] = i
+            newIndex += 1
+    return newIndex
 
 
 ##############################################################
