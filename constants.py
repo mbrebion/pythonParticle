@@ -9,6 +9,9 @@ DEAD = 0
 LEFT = 1
 RIGHT = 2
 
+INITSIZEEXTRARATIO = 1.3
+
+
 
 class ComputedConstants:
     meanFreePath = None
@@ -29,6 +32,7 @@ class ComputedConstants:
     it = None
     nbCells = None
     decoloringRatio = 0.85
+    alphaAveraging = 0.025  # temperature and pressure averaging
 
     @classmethod
     def thermodynamicSetup(cls, initTemp, length, width, initPressure, nbPartTarget, ls):
@@ -68,12 +72,12 @@ class ComputedConstants:
         print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
         print("Kbs = ", "{:.2e}".format(cls.kbs), "J/K")
         print("ms = ", "{:.2e}".format(cls.ms), "kg")
-        print("d = ", "{:.3e}".format(cls.ds), "m")
-        print("v* = ", "{:.2e}".format(cls.vStar), "m/s")
+        print("d = ", "{:.5e}".format(cls.ds), "m")
+        print("v* = ", "{:.5e}".format(cls.vStar), "m/s")
         print("dOM/L = v*dt/L = ", "{:.2e}".format(cls.vStar * cls.dt / cls.length))
         print("dOM/d = v*dt/d = ", "{:.2e}".format(cls.vStar * cls.dt / cls.ds))
-        print("l : ", "{:.2e}".format(cls.ls), " m")
+        print("l : ", "{:.5e}".format(cls.ls), " m")
         print("tau : ", "{:.2e}".format(cls.ls / cls.vStar), " s")
-        print("dt : ", "{:.2e}".format(cls.dt), " s")
+        print("dt : ", "{:.5e}".format(cls.dt), " s")
         print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
         print()

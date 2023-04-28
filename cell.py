@@ -5,12 +5,10 @@ import numbaAccelerated
 from constants import *
 from coords import Coords
 
-INITSIZEEXTRARATIO = 1.2
-
 
 class Cell:
 
-    def __init__(self, nbPart, effectiveTemp, left, right, startIndex):
+    def __init__(self, nbPart, effectiveTemp, left, right, startIndex, nbPartTarget=None):
         """
         Create a cell
         :param nbPart: effective number of part in cell
@@ -26,9 +24,11 @@ class Cell:
         self.startIndex = startIndex
 
         self.nbPart = nbPart
-        self.arraySize = int(self.nbPart * INITSIZEEXTRARATIO)
-        nb = max(self.nbPart // 100,20)
-        #nb =self.nbPart*2
+        if nbPartTarget is None:
+            nbPartTarget = self.nbPart
+        self.arraySize = int(nbPartTarget * INITSIZEEXTRARATIO)
+        nb = max(nbPartTarget // 100, 30)
+
         self.histo = np.zeros(nb, dtype=int)
         # the amount of neighbors checked for collisions is adapted dynamically to ensure fast computations
         # and miss less than 0.1 % of collisions
@@ -41,7 +41,7 @@ class Cell:
         self.coords = Coords(self.arraySize)
 
         # creation of swap arrays
-        swapSize = int(0.05 * self.arraySize)
+        swapSize = int(0.1 * self.arraySize)
         self.leftSwap = Coords(swapSize)
         self.rightSwap = Coords(swapSize)
 
@@ -49,6 +49,7 @@ class Cell:
         self.instantPressure = ComputedConstants.initPressure * nbPart / ComputedConstants.initPressure * ComputedConstants.nbCells
         self.averagedPressure = self.instantPressure
         self.temperature = effectiveTemp
+        self.averagedTemperature = effectiveTemp
 
         # living particles
 
@@ -100,6 +101,11 @@ class Cell:
         self.temperature = numbaAccelerated.computeAverageTemperature(self.coords.vxs, self.coords.vys, self.coords.wheres, ComputedConstants.ms,
                                                                       ComputedConstants.kbs)
 
+        alpha = ComputedConstants.alphaAveraging
+        self.averagedTemperature = alpha * self.temperature + (1 - alpha) * self.averagedTemperature
+
+        return self.temperature
+
     def computePressure(self, fup, fdown):
         """
         update instant and average pressure
@@ -108,7 +114,7 @@ class Cell:
         :return: None
         """
 
-        alpha = ComputedConstants.vStar * ComputedConstants.dt / ComputedConstants.length / 10
+        alpha = ComputedConstants.vStar * ComputedConstants.dt / ComputedConstants.length
         self.instantPressure = (fup + fdown) / (2 * ComputedConstants.length)
         self.averagedPressure = alpha * self.instantPressure + (1 - alpha) * self.averagedPressure
 
@@ -189,12 +195,12 @@ class Cell:
 
         self.updateConstants()
 
-        if ComputedConstants.it % 1500 == 0:
+        if ComputedConstants.it % 1000 == 0:
             self.improveSpeed()
 
     def improveSpeed(self):
         ln = len(self.histo)
-        h = np.array(self.histo,dtype=float)
+        h = np.array(self.histo, dtype=float)
         h /= np.sum(h)
         h *= 100
         k = 1
@@ -211,30 +217,6 @@ class Cell:
         DeltaMax = int(0.5 + k + np.log(0.1 / Sk) / np.log(xk))
 
         self.histo = np.zeros(DeltaMax, dtype=int)
-        print(DeltaMax)
-
-
-    def improveSpeedOld(self):
-        ln = len(self.histo)
-        nbZeros = ln - np.count_nonzero(self.histo) - 1
-        if nbZeros > 2:
-            # Too many neighbors are searched for nothing
-            self.histo = np.zeros(ln - nbZeros + 2, dtype=int)
-            return
-        sm = np.sum(self.histo)
-        expectedTail = int(sm * 1e-3)
-        if self.histo[-1] > expectedTail:
-            # here, we might miss somme collisions.
-            # statistic studies (not proved) tend to show that sum_(k+1,+oo)(histo) \approx histo(k)
-            # when k is big enough. Thus, we check here is un-detection rate remains below 0.1 %
-
-            more = int((np.log(self.histo[-1] + 1) - np.log(expectedTail + 1)) / np.log(2))
-            # estimation of additional neighbors to be checked
-            self.histo = np.zeros(ln + more, dtype=int)
-            return
-
-        if np.sum(self.histo) > 20 * self.nbPart:
-            self.histo *= 0
 
     def count(self):
         return numbaAccelerated.countAlive(self.coords.wheres)

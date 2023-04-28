@@ -5,14 +5,14 @@ import tracker
 
 class Domain:
 
-    def __init__(self, nbCells,*, ratios=None, effectiveTemp=None):
+    def __init__(self, nbCells, *, ratios=None, effectiveTemps=None):
         ComputedConstants.nbCells = nbCells
 
         if ratios is None:
             ratios = [1. / ComputedConstants.nbCells for _ in range(nbCells)]
 
-        if effectiveTemp is None:
-            effectiveTemp = [ComputedConstants.initTemp for _ in range(nbCells)]
+        if effectiveTemps is None:
+            effectiveTemps = [ComputedConstants.initTemp for _ in range(nbCells)]
 
         nbParts = [int(ComputedConstants.nbPartTarget * ratios[i]) for i in range(nbCells)]
 
@@ -23,7 +23,7 @@ class Domain:
             left = i * ComputedConstants.length / nbCells
             right = (i + 1) * ComputedConstants.length / nbCells
 
-            c = Cell(nbParts[i], effectiveTemp[i], left, right, startIndex)
+            c = Cell(nbParts[i], effectiveTemps[i], left, right, startIndex,ComputedConstants.nbPartTarget//nbCells)
             startIndex += nbParts[i]
             self.cells.append(c)
 
@@ -39,10 +39,12 @@ class Domain:
         # trackers
         self.trackers = []
 
-    def printTemperatures(self):
+    def getAveragedTemperatures(self):
+        out = []
         for cell in self.cells:
-            cell.computeTemperature()
-            print(cell.temperature)
+            out.append(cell.averagedTemperature)
+        return out
+
 
     def addTracker(self, id):
         self.trackers.append(tracker.Tracker(self, id))
@@ -54,14 +56,12 @@ class Domain:
         for c in self.cells:
             c.update()
 
-
         for c in self.cells:
             c.prepareSwap()
 
         for c in self.cells:
             c.applySwap()
 
-        # for t in self.trackers:
-        #    t.doMeasures()
+        for t in self.trackers:
+            t.doMeasures()
 
-        # print("c1 : ", self.cells[0].count(), " c2 : ", self.cells[1].count(), " total : ", self.cells[1].count() + self.cells[0].count())

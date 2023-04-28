@@ -34,7 +34,7 @@ def getMeanFreePathSimulated(S,ds,Ns):
     """
 
 
-    return S/(4 * 2**0.5 * ds * Ns)
+    return S/(2 * 2**0.5 * ds * Ns)
 
 def getDiameter(S,Ns,ls):
     """
@@ -46,7 +46,7 @@ def getDiameter(S,Ns,ls):
     :return: the diameter of simulated particle (in m)
     """
 
-    return S / (4*2**0.5 * Ns * ls)
+    return S / (2*2**0.5 * Ns * ls)
 
 def getMeanSquareVelocity(KbS ,ms,temperature):
     """

@@ -36,12 +36,12 @@ class Tracker:
     def _updateCurrentIndex(self):
         if self.currentIndex is None:
             index, idCell = -1, -1
-            cell = None
+            _cell = None
             while index == -1:
                 idCell += 1
-                cell = self.domain.cells[idCell]
-                index = numbaAccelerated.retieveIndex(self.id, cell.coords.wheres)
-            self.currentCell = cell
+                _cell = self.domain.cells[idCell]
+                index = numbaAccelerated.retieveIndex(self.id, _cell.coords.wheres)
+            self.currentCell = _cell
             self.currentIndex = index
 
     def getPosition(self):

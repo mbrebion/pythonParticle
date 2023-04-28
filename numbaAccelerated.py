@@ -16,7 +16,7 @@ def prettyPrint(values, mask):
 ###################### Particle Swapping #####################
 ##############################################################
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, fastmath=True)
 def fromAtoB(ia, ib, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb):
     # swap
 
@@ -33,7 +33,7 @@ def fromAtoB(ia, ib, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vys
     wheresa[ia] = 0
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, fastmath=True)
 def moveToSwap(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb, xLim, kindOfLim):
     """
     Move particles from a coordinates to b coordinates (swap if needed) and return the amount of particle moved
@@ -56,7 +56,7 @@ def moveToSwap(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, whe
     return count
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, fastmath=True)
 def moveSwapToNeighbor(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb, amount, ymax):
     """
     Move particles from swap a to other cell b
@@ -69,7 +69,7 @@ def moveSwapToNeighbor(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, v
         fromAtoB(i, bestIndex, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, fastmath=True)
 def retieveIndex(id, wheres):
     """
     find present index of particle id in particle arrays
@@ -88,8 +88,8 @@ def retieveIndex(id, wheres):
 ##############################################################
 
 
-@jit(nopython=True, cache=True)
-def goodIndexToInsertTo(y, ys, wheres, ymax):
+@jit(nopython=True, cache=True, fastmath=True)
+def goodIndexToInsertTo(y, ys, wheres, ymax, fastmath=True):
     """
 
     :param y: y of target particle
@@ -116,7 +116,7 @@ def goodIndexToInsertTo(y, ys, wheres, ymax):
     return index
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, fastmath=True)
 def countAlive(wheres):
     count = 0
     for i in range(len(wheres)):
@@ -125,7 +125,7 @@ def countAlive(wheres):
     return count
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, fastmath=True)
 def roll1(i, ar1, ar2, ar3, ar4, ar5, ar6):
     """
     set values formerly at index i-1 to index i for 5 arrays
@@ -146,7 +146,7 @@ def roll1(i, ar1, ar2, ar3, ar4, ar5, ar6):
     ar6[i] = ar6[i - 1]
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, fastmath=True)
 def sortCell(xs, ys, vxs, vys, wheres, colors):
     """
     Sort 5 arrays according to ys (second array provided) with insertion algorithm (fastest for quite already sorted arrays)
@@ -320,6 +320,7 @@ def computeAverageTemperature(vxs, vys, wheres, m, kb):
     :param kb: boltzmann constant
     :return: averaged temperature
     """
+
     vc = 0
     n = 0
     for i in range(len(vxs)):
@@ -327,6 +328,9 @@ def computeAverageTemperature(vxs, vys, wheres, m, kb):
             continue
         n += 1
         vc += vxs[i] ** 2 + vys[i] ** 2
+    if n == 0:
+        return 0
+
     return m * vc / (2 * kb * n)
 
 

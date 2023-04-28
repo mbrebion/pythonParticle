@@ -4,8 +4,9 @@ from glumpy.graphics.text import FontManager
 from glumpy.graphics.collections import GlyphCollection
 from glumpy.transforms import Position, OrthographicProjection
 from domain import Domain
-from constants import ComputedConstants
+from constants import ComputedConstants, INITSIZEEXTRARATIO
 import warnings
+import numpy as np
 
 warnings.filterwarnings('ignore')
 
@@ -57,21 +58,24 @@ class Window:
 
     def __init__(self, nPart, P, T):
         # simulation
-        X = 0.1
+        X = 1
         Y = 0.1
         ls = 5e-3
         ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
 
-        #self.domain = Domain(4, effectiveTemp=[250, 250, 350, 350])
-        self.domain = Domain(1)
+        # self.domain = Domain(4, effectiveTemp=[250, 250, 350, 350])
+        tg = 330
+        td = 270
+        alpha = td/tg
+        self.domain = Domain(2,effectiveTemps=[tg,td],ratios=[1-1/(1+alpha),1/(1+alpha)])
+        ComputedConstants.dt /= 1.
 
-        ComputedConstants.dt *= 0.5
 
         # window
         self.resX = 1024
         self.resY = 1024
         self.window = app.Window(self.resX, self.resY, color=(1, 1, 1, 1))
-        nTot = int(nPart * 1.2)
+        nTot = int(nPart * INITSIZEEXTRARATIO)
         self.program = gloo.Program(vertex, fragment, count=nTot)  # 1.2 for dead cells
 
         self.program['radius'] = self.getRadius()
@@ -91,19 +95,35 @@ class Window:
 
         self.createLabels()
 
-        # add trackers
-        self.domain.addTracker(3 * nPart // 4)
-        self.domain.addTracker(nPart // 2)
-        self.domain.addTracker(nPart // 4)
+        nTracker = 0
+        for i in range(nTracker):
+            self.domain.addTracker(int((i + 0.5) * nPart / nTracker))
+
+
 
         app.run()
 
+        ls = []
+        ts = []
+
         for t in self.domain.trackers:
             l, ul, tl, utl = t.getMeanFreePathresults()
+            ls.append(l)
+            ts.append(tl)
             print("Particle ", t.id, " : ")
             print("l = ", "{:.2e}".format(l), " +/- ", "{:.2e}".format(ul), " m")
             print("tl = ", "{:.2e}".format(tl), " +/- ", "{:.2e}".format(utl), " s")
             print()
+
+        if nTracker >= 0:
+            ls = np.array(ls)
+            ts = np.array(ts)
+
+            print()
+            print("l = ", "{:.2e}".format(np.average(ls)), " +/- ", "{:.2e}".format(np.std(ls) / nTracker ** 0.5), " m")
+            print("t = ", "{:.2e}".format(np.average(ts)), " +/- ", "{:.2e}".format(np.std(ts) / nTracker ** 0.5), " s")
+
+
 
     def updateProgram(self):
         start = 0
@@ -157,29 +177,25 @@ class Window:
         self.program.draw(gl.GL_POINTS)
         self.labels.draw()
 
-        alpha = 0.02
-        nStep = 10
+        alpha = 0.05
+        nStep = 1
         tInit = time.perf_counter()
 
         for i in range(nStep):
             self.domain.update()
 
-        #if self.timeStep % 30 == 0:
-        #    self.domain.printTemperatures()
-
         self.duration = (time.perf_counter() - tInit) / nStep * alpha + (1 - alpha) * self.duration
 
         self.updateProgram()
 
-        if self.timeStep % 30 == 0:
+        if self.timeStep % 50 == 0:
+            print(self.domain.getAveragedTemperatures(),sum(self.domain.getAveragedTemperatures()))
             self.updateLabels()
             pass
 
 
-window = Window(5000, 1e5, 300)
+window = Window(20000, 1e5, 300)
 
 # todolist :
-#  - compute thermodynamic values such as l (mean free path)
-#  - add multiple cells
 #  - add moving wall
 #  - checking integration with imgui for nicer outputs
