@@ -339,7 +339,7 @@ def computeAverageTemperature(vxs, vys, wheres, m, kb):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True)
-def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo):
+def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo,coloring):
     """
     This method update particle positions and velocities taking into account elastic collisions
     It first tries to detect efficiently if collisions occurred,
@@ -355,10 +355,10 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo):
     :param dt: time step
     :param d: particle diameter
     :param histo: histogram of collisions detection according to j-i for storing purpose
+    :param coloring: if True, colors are updated when two particles collide
     :return: number of collisions
     """
     nbCollide = 0.
-    # colors[:] = 0.
     ra = np.array([0., 0.])
     rb = np.array([0., 0.])
     va = np.array([0., 0.])
@@ -380,8 +380,9 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo):
                 # record strategy
                 histo[j - i] += 1
 
-                colors[i] = 1
-                colors[j] = 1
+                if coloring:
+                    colors[i] = 1
+                    colors[j] = 1
 
                 nbCollide += 1.
 

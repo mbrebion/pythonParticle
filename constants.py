@@ -3,14 +3,13 @@ import thermo
 MASS = 4.83e-26  # kg ; mean mass of air particle
 Kb = 1.38e-23  # USI ; Boltzmann constant
 DIAMETER = 0.37e-9  # m ; effective diameter of average air particle
-H = 1  # m ; S*H = V
+Z = 1  # m ; S*Z = V
 
 DEAD = 0
 LEFT = 1
 RIGHT = 2
 
 INITSIZEEXTRARATIO = 1.3
-
 
 
 class ComputedConstants:
@@ -57,7 +56,7 @@ class ComputedConstants:
         cls.initPressure = initPressure
         cls.nbPartTarget = nbPartTarget
         cls.surface = cls.length * cls.width
-        cls.volume = cls.length * cls.width * H
+        cls.volume = cls.length * cls.width * Z
         cls.kbs = thermo.getKbSimu(cls.initPressure, cls.volume, cls.initTemp, nbPartTarget)
         cls.ms = thermo.getMSimu(MASS, Kb, cls.kbs)
         cls.ds = thermo.getDiameter(cls.surface, cls.nbPartTarget, cls.ls)

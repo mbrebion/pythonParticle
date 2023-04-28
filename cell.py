@@ -7,6 +7,7 @@ from coords import Coords
 
 
 class Cell:
+    colorCollisions = True
 
     def __init__(self, nbPart, effectiveTemp, left, right, startIndex, nbPartTarget=None):
         """
@@ -167,12 +168,13 @@ class Cell:
         nbNeighbour is the number of neighbours par particle i which are checked
         :return: None
         """
+        if Cell.colorCollisions:
+            self.coords.colors *= ComputedConstants.decoloringRatio
 
-        self.coords.colors *= ComputedConstants.decoloringRatio
         numbaAccelerated.detectAllCollisions(*self.coords.tpl,
                                              ComputedConstants.dt,
                                              ComputedConstants.ds,
-                                             self.histo)
+                                             self.histo, Cell.colorCollisions)
 
     #######################################
 
