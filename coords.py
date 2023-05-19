@@ -13,7 +13,7 @@ class Coords:
         self.wheres = np.ones(size, dtype=np.int32) * DEAD
         self.colors = np.zeros(size, dtype=float)
 
-        self.indices = np.zeros(size, dtype=np.int32)
+        #self.indices = np.zeros(size, dtype=np.int32)
 
         self.alive = 0
 

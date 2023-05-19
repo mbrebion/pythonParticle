@@ -47,10 +47,12 @@ class Cell:
         self.rightSwap = Coords(swapSize)
 
         # thermodynamic instant and averaged variables
-        self.instantPressure = ComputedConstants.initPressure * nbPart / ComputedConstants.initPressure * ComputedConstants.nbCells
+        self.instantPressure = ComputedConstants.initPressure
         self.averagedPressure = self.instantPressure
         self.temperature = effectiveTemp
         self.averagedTemperature = effectiveTemp
+        self.ecl = 0.  # left of wall kinetic energy
+        self.ecr = 0.
 
         # living particles
 
@@ -71,6 +73,9 @@ class Cell:
         # neighboring cells
         self.leftCell = None
         self.rightCell = None
+
+        # wall
+        self.wall = None
 
     def randomInit(self, effectiveTemp):
         vStar = thermo.getMeanSquareVelocity(ComputedConstants.kbs, ComputedConstants.ms, effectiveTemp)
@@ -94,9 +99,17 @@ class Cell:
 
         self.coords.updateTuple()
 
-    def advect(self):
-        self.coords.xs += self.coords.vxs * ComputedConstants.dt
-        self.coords.ys += self.coords.vys * ComputedConstants.dt
+    ##############################################################
+    ################## Compute thermodynamic      ################
+    ##############################################################
+
+    def computeKineticEnergy(self):
+        """
+        :param x: wall location
+        :return: kinetic energies (left and right of wall)
+        """
+        self.ecl, self.ecr = numbaAccelerated.computeEcs(self.coords.vxs, self.coords.vys, self.coords.wheres, ComputedConstants.ms)
+        return self.ecl, self.ecr
 
     def computeTemperature(self):
         self.temperature = numbaAccelerated.computeAverageTemperature(self.coords.vxs, self.coords.vys, self.coords.wheres, ComputedConstants.ms,
@@ -119,20 +132,12 @@ class Cell:
         self.instantPressure = (fup + fdown) / (2 * ComputedConstants.length)
         self.averagedPressure = alpha * self.instantPressure + (1 - alpha) * self.averagedPressure
 
-    def wallBounce(self):
-        # up and down
-        fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.coords.ys, self.coords.vys, self.coords.wheres, ComputedConstants.width,
-                                                                      ComputedConstants.dt,
-                                                                      ComputedConstants.ms)
-        self.computePressure(fup, fdown)
+    def count(self):
+        return numbaAccelerated.countAlive(self.coords.wheres)
 
-        # left wall
-        if self.leftCell is None:
-            numbaAccelerated.staticWallInterractionLeft(self.coords.xs, self.coords.vxs, self.coords.wheres, self.left)
-
-        # right wall
-        if self.rightCell is None:
-            numbaAccelerated.staticWallInterractionRight(self.coords.xs, self.coords.vxs, self.coords.wheres, self.right)
+    def countLeft(self, x):
+        out = numbaAccelerated.countAliveLeft(self.coords.xs, self.coords.wheres, x)
+        return out
 
     ##############################################################
     ####################          Swapping        ################
@@ -161,6 +166,29 @@ class Cell:
             self.rightSwap.alive = numbaAccelerated.moveToSwap(*self.coords.tpl, *self.rightSwap.tpl, self.right, True)
 
     ##############################################################
+    #################   Wall and Collision       #################
+    ##############################################################
+
+    def wallBounce(self):
+        # up and down
+        fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.coords.ys, self.coords.vys, self.coords.wheres, ComputedConstants.width,
+                                                                      ComputedConstants.dt,
+                                                                      ComputedConstants.ms)
+        self.computePressure(fup, fdown)
+
+        # moving Wall
+        if self.wall is not None:
+            fpl, fpr = numbaAccelerated.movingWallInteraction(self.coords.xs, self.coords.vxs, self.coords.wheres, self.wall.location(), self.wall.velocity(),
+                                                              ComputedConstants.dt, ComputedConstants.ms, self.wall.mass())
+            self.wall.addToForce(fpl, fpr)
+
+        # left wall
+        if self.leftCell is None:
+            numbaAccelerated.staticWallInteractionLeft(self.coords.xs, self.coords.vxs, self.coords.wheres, self.left)
+
+        # right wall
+        if self.rightCell is None:
+            numbaAccelerated.staticWallInteractionRight(self.coords.xs, self.coords.vxs, self.coords.wheres, self.right)
 
     def collide(self):
         """
@@ -171,36 +199,20 @@ class Cell:
         if Cell.colorCollisions:
             self.coords.colors *= ComputedConstants.decoloringRatio
 
+        x = 1e9
+        if self.wall is not None:
+            x = self.wall.location()
+
         numbaAccelerated.detectAllCollisions(*self.coords.tpl,
                                              ComputedConstants.dt,
                                              ComputedConstants.ds,
                                              self.histo, Cell.colorCollisions)
 
-    #######################################
-
-    def sort(self):
-        return self.coords.sort()
-
-    def updateConstants(self):
-        self.upToDate = False  # invalidate position buffer
-
-        self.computeTemperature()
-
-    def update(self):
-        self.advect()
-
-        self.sort()
-
-        self.collide()
-
-        self.wallBounce()
-
-        self.updateConstants()
-
-        if ComputedConstants.it % 1000 == 0:
-            self.improveSpeed()
-
-    def improveSpeed(self):
+    def improveCollisionDetectionSpeed(self):
+        """
+        Improve collision detectionSpeed by estimated the smallest number of neighbor to check for collision
+        :return: None
+        """
         ln = len(self.histo)
         h = np.array(self.histo, dtype=float)
         h /= np.sum(h)
@@ -220,8 +232,16 @@ class Cell:
 
         self.histo = np.zeros(DeltaMax, dtype=int)
 
-    def count(self):
-        return numbaAccelerated.countAlive(self.coords.wheres)
+    def sort(self):
+        return self.coords.sort()
+
+    ##############################################################
+    #################      Helper functions     ##################
+    ##############################################################
+
+    def updateConstants(self):
+        self.upToDate = False  # invalidate position buffer
+        self.computeTemperature()
 
     def getPositionsBuffer(self):
         if not self.upToDate:
@@ -229,48 +249,37 @@ class Cell:
 
         return self.positions
 
-    def printHisto(self):
-        out = "["
-        for v in self.histo:
-            out += str(v) + ","
-        out = out[0:-1] + "]"
-        return out
+    def advect(self):
+        self.coords.xs += self.coords.vxs * ComputedConstants.dt
+        self.coords.ys += self.coords.vys * ComputedConstants.dt
 
-    def plot(self):
-        # plot using matplotlib
+    def middle(self):
+        return (self.left + self.right) * 0.5
 
-        indices = np.nonzero(self.coords.wheres != DEAD)
+    def updateIndicesAccordingToWall(self, x):
+        """
+        Negates indices of particle initially left of wall
+        :param x: wall location
+        :return: None
+        """
+        for i in range(len(self.coords.xs)):
+            if self.coords.xs[i] < x:
+                self.coords.wheres[i] *= -1
 
-        plt.rcParams["figure.figsize"] = [7.50, 7.50]
-        plt.rcParams["figure.autolayout"] = True
+    ##############################################################
+    ###################        Update cell       #################
+    ##############################################################
 
-        plt.subplot(221)
-        plt.xlabel("x")
-        plt.ylabel("y")
+    def update(self):
+        self.advect()
 
-        plt.axis("equal")
-        fig = plt.gcf()
-        ax = fig.gca()
-        plt.xlim(0, ComputedConstants.length)
-        plt.ylim(0, ComputedConstants.width)
-        circles = []
-        for i in indices[0]:
-            circles.append(plt.Circle((self.coords.xs[i], self.coords.ys[i]), ComputedConstants.ds))
+        self.sort()
 
-        p = PatchCollection(circles)
-        p.set_color("r")
-        ax.add_collection(p)
-        plt.grid()
+        self.collide()
 
-        plt.subplot(222)
-        plt.xlabel("vx")
-        plt.ylabel("count")
+        self.wallBounce()
 
-        plt.hist(self.coords.vxs[indices], bins='auto')
+        self.updateConstants()
 
-        plt.subplot(223)
-        plt.xlabel("vy")
-        plt.ylabel("count")
-        plt.hist(self.coords.vys[indices], bins='auto')
-
-        plt.show()
+        if ComputedConstants.it + 400 % 500 == 0:
+            self.improveCollisionDetectionSpeed()

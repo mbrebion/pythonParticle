@@ -1,3 +1,5 @@
+import time
+
 from constants import ComputedConstants
 from domain import Domain
 
@@ -12,9 +14,9 @@ def printList(l, name):
 
 X = 1
 Y = 0.1
-ls = 20e-3
+ls = 5e-3
 
-nPart = 80000
+nPart = 50000
 T = 300
 P = 1e5
 
@@ -40,26 +42,23 @@ instants = []
 temps = []
 
 it = 0
-itMax = 10e3
+itMax = 1e3
 instants.append(ComputedConstants.time)
 temps.append(domain.getAveragedTemperatures())
+ComputedConstants.alphaAveraging = 1
 while it < itMax:
     it += 1
     domain.update()
 
-    if it > 500:
-        ComputedConstants.alphaAveraging = 0.01
-    if it > 2000:
-        ComputedConstants.alphaAveraging = 0.005
-    if it > 5000:
-        ComputedConstants.alphaAveraging = 0.001
-
-    if it % 100 == 0:
+    if it % 500 == 0:
         print(100 * it / itMax, "%")
-        print(domain.getAveragedTemperatures(),ComputedConstants.alphaAveraging)
-    if it % 100 == 0:
+        print(domain.getAveragedTemperatures(), ComputedConstants.alphaAveraging)
+    if it % 500 == 0:
         instants.append(ComputedConstants.time)
         temps.append(domain.getAveragedTemperatures())
+
+    if it % 10000 == 0:
+        time.sleep(5)
 
 printList(instants, "ts")
 printList(temps, "temps")

@@ -2,21 +2,11 @@ from numba import jit
 import numpy as np
 
 
-def prettyPrint(values, mask):
-    out = ""
-    for i in range(len(values)):
-        if mask[i] == 0:
-            out += "  _  "
-        else:
-            out += " " + str(values[i])[:4]
-    return out
-
-
 ##############################################################
 ###################### Particle Swapping #####################
 ##############################################################
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def fromAtoB(ia, ib, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb):
     # swap
 
@@ -33,7 +23,7 @@ def fromAtoB(ia, ib, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vys
     wheresa[ia] = 0
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def moveToSwap(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb, xLim, kindOfLim):
     """
     Move particles from a coordinates to b coordinates (swap if needed) and return the amount of particle moved
@@ -56,7 +46,7 @@ def moveToSwap(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, whe
     return count
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def moveSwapToNeighbor(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb, amount, ymax):
     """
     Move particles from swap a to other cell b
@@ -69,18 +59,48 @@ def moveSwapToNeighbor(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, v
         fromAtoB(i, bestIndex, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
 
 
-@jit(nopython=True, cache=True, fastmath=True)
-def retieveIndex(id, wheres):
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def indicesToSwapRight(xs, xmax, wheres, indices):
     """
-    find present index of particle id in particle arrays
-    :param id:
-    :param wheres : mask array containing list of indices
-    :return: index of particle id
+    retrieve the indices of particle which must be swapped to right and store therm to indices
+    :param xs: x coordinates
+    :param xmax: end of cell coordinate
+    :param wheres: mask
+    :param indices: output array
+    :return: Number of particle to swap
     """
-    for i in range(len(wheres)):
-        if wheres[i] == id:
-            return i
-    return -1
+
+    for i in range(len(indices)):
+        indices[i] = 0
+    newIndex = 0
+
+    for i in range(len(xs)):
+        if xs[i] > xmax and wheres[i] > 0:
+            indices[newIndex] = i
+            newIndex += 1
+    return newIndex
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def indicesToSwapLeft(xs, xmin, wheres, indices):
+    """
+    retrieve the indices of particle which must be swapped to right and store therm to indices
+    :param xs: x coordinates
+    :param xmin: begin of cell coordinate
+    :param wheres: mask
+    :param indices: output array
+    :return: Number of particle to swap
+    """
+
+    for i in range(len(indices)):
+        indices[i] = 0
+    newIndex = 0
+
+    for i in range(len(xs)):
+        if xs[i] < xmin and wheres[i] > 0:
+            indices[newIndex] = i
+            newIndex += 1
+    return newIndex
 
 
 ##############################################################
@@ -88,8 +108,8 @@ def retieveIndex(id, wheres):
 ##############################################################
 
 
-@jit(nopython=True, cache=True, fastmath=True)
-def goodIndexToInsertTo(y, ys, wheres, ymax, fastmath=True):
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def goodIndexToInsertTo(y, ys, wheres, ymax):
     """
 
     :param y: y of target particle
@@ -116,16 +136,7 @@ def goodIndexToInsertTo(y, ys, wheres, ymax, fastmath=True):
     return index
 
 
-@jit(nopython=True, cache=True, fastmath=True)
-def countAlive(wheres):
-    count = 0
-    for i in range(len(wheres)):
-        if wheres[i] > 0:
-            count += 1
-    return count
-
-
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def roll1(i, ar1, ar2, ar3, ar4, ar5, ar6):
     """
     set values formerly at index i-1 to index i for 5 arrays
@@ -146,7 +157,7 @@ def roll1(i, ar1, ar2, ar3, ar4, ar5, ar6):
     ar6[i] = ar6[i - 1]
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def sortCell(xs, ys, vxs, vys, wheres, colors):
     """
     Sort 5 arrays according to ys (second array provided) with insertion algorithm (fastest for quite already sorted arrays)
@@ -179,11 +190,60 @@ def sortCell(xs, ys, vxs, vys, wheres, colors):
 
 
 ##############################################################
-################## Static wall interraction ##################
+########### Static and moving wall interraction ##############
 ##############################################################
 
-@jit(nopython=True, cache=True, fastmath=True)
-def staticWallInterractionLeft(xs, vxs, wheres, left):
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def movingWallInteraction(xs, vxs, wheres, x, v, dt, mp, m):
+    """
+        update coordinates and velocities of particles interacting left wall (is exists)
+
+        :param xs: array containing x coordinates of particles
+        :param vxs: array containing x velocities of particles
+        :param wheres: mask array
+        :param x : x coordinate of wall
+        :param v : velocity coordinate of wall
+        :param dt : time step
+        :param mp : mass of particle
+        :param m : mass of wall
+
+        :return: Force applied to wall
+        """
+    fpl = 0.
+    fpr = 0.
+    for i in range(len(xs)):
+        if wheres[i] == 0:
+            continue
+
+        # bounce on moving wall must be taken into account more precisely
+
+        if (wheres[i] < 0 and xs[i] > x) or (wheres[i] > 0 and xs[i] < x):
+            # particle crossed the wall, in either direction
+            delta = -(xs[i] - x) / (v - vxs[i])
+
+            # move backward the particle
+            xs[i] -= vxs[i] * delta
+
+            # bounce and compute force applied to wall
+            # newV = (2 * m * v + (mp - m) * vxs[i]) / (m + mp)
+
+            newV = -  vxs[i] + 2 * v  # infinitely massive wall
+
+            if wheres[i] < 0:
+                fpl += - (newV - vxs[i]) * mp / dt
+            else:
+                fpr += - (newV - vxs[i]) * mp / dt
+            vxs[i] = newV
+
+            # move forward the particle
+            xs[i] += vxs[i] * delta
+
+    return fpl, fpr
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def staticWallInteractionLeft(xs, vxs, wheres, left):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
@@ -202,8 +262,8 @@ def staticWallInterractionLeft(xs, vxs, wheres, left):
             vxs[i] = - vxs[i]
 
 
-@jit(nopython=True, cache=True, fastmath=True)
-def staticWallInterractionRight(xs, vxs, wheres, right):
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def staticWallInteractionRight(xs, vxs, wheres, right):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
@@ -223,7 +283,7 @@ def staticWallInterractionRight(xs, vxs, wheres, right):
             vxs[i] = - vxs[i]
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def staticWallInterractionUpAndDown(ys, vys, wheres, width, dt, m):
     """
     update coordinates and velocities of particles interacting with solid walls (which are horizontal)
@@ -257,58 +317,34 @@ def staticWallInterractionUpAndDown(ys, vys, wheres, width, dt, m):
 
 
 ##############################################################
-#######################  Swapping  ###########################
+##########  Average temperature and kinetic energy ###########
 ##############################################################
 
-@jit(nopython=True, cache=True, fastmath=True)
-def indicesToSwapRight(xs, xmax, wheres, indices):
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def computeEcs(vxs, vys, wheres, m):
     """
-    retrieve the indices of particle which must be swapped to right and store therm to indices
-    :param xs: x coordinates
-    :param xmax: end of cell coordinate
-    :param wheres: mask
-    :param indices: output array
-    :return: Number of particle to swap
-    """
+        compute kinetic energy left and right to wall
+        :param vxs: x velocities
+        :param vys: y velocities
+        :param wheres: mask array
+        :param m: mass
+        :return: left and right kinetic energy
+        """
+    ecl = 0.
+    ecr = 0.
+    for i in range(len(vxs)):
+        if wheres[i] == 0:
+            continue
 
-    for i in range(len(indices)):
-        indices[i] = 0
-    newIndex = 0
-
-    for i in range(len(xs)):
-        if xs[i] > xmax and wheres[i] > 0:
-            indices[newIndex] = i
-            newIndex += 1
-    return newIndex
-
-
-@jit(nopython=True, cache=True, fastmath=True)
-def indicesToSwapLeft(xs, xmin, wheres, indices):
-    """
-    retrieve the indices of particle which must be swapped to right and store therm to indices
-    :param xs: x coordinates
-    :param xmin: begin of cell coordinate
-    :param wheres: mask
-    :param indices: output array
-    :return: Number of particle to swap
-    """
-
-    for i in range(len(indices)):
-        indices[i] = 0
-    newIndex = 0
-
-    for i in range(len(xs)):
-        if xs[i] < xmin and wheres[i] > 0:
-            indices[newIndex] = i
-            newIndex += 1
-    return newIndex
+        vc = vxs[i] ** 2 + vys[i] ** 2
+        if wheres[i] < 0:
+            ecl += m * vc / 2
+        else:
+            ecr += m * vc / 2
+    return ecl, ecr
 
 
-##############################################################
-###################  Average temperature  ####################
-##############################################################
-
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def computeAverageTemperature(vxs, vys, wheres, m, kb):
     """
     compute average temperature in cell
@@ -338,8 +374,8 @@ def computeAverageTemperature(vxs, vys, wheres, m, kb):
 ###################  Collision detection  ####################
 ##############################################################
 
-@jit(nopython=True, cache=True, fastmath=True)
-def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo,coloring):
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloring):
     """
     This method update particle positions and velocities taking into account elastic collisions
     It first tries to detect efficiently if collisions occurred,
@@ -372,8 +408,9 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo,coloring)
             continue
 
         for j in range(i + 1, min(len(xs), i + nbSearch)):
-            if wheres[j] == 0:
+            if wheres[j] == 0 or (wheres[i] * wheres[j] < 0):
                 continue
+
             coll, t = isCollidingFast(xs[i], ys[i], xs[j], ys[j], vxs[i], vys[i], vxs[j], vys[j], dt, d)
 
             if coll:
@@ -411,17 +448,7 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo,coloring)
     return nbCollide
 
 
-@jit(nopython=True, cache=True, fastmath=True)
-def dot(a, b):
-    return a[0] * b[0] + a[1] * b[1]
-
-
-@jit(nopython=True, cache=True, fastmath=True)
-def norm(a):
-    return dot(a, a) ** 0.5
-
-
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def bounce(ra, rb, va, vb):
     """
     compute accurate bounce between particles
@@ -440,7 +467,7 @@ def bounce(ra, rb, va, vb):
     return vaf, vbf
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
     """
     Detect whether two particles have collided between t-dt and t
@@ -481,10 +508,57 @@ def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
 
 
 ##############################################################
-#################  helper for openglView  ####################
+#####################  Helper functions  #####################
 ##############################################################
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def retieveIndex(id, wheres):
+    """
+    find present index of particle id in particle arrays
+    :param id:
+    :param wheres : mask array containing list of indices
+    :return: index of particle id
+    """
+    for i in range(len(wheres)):
+        if wheres[i] == id:
+            return i
+    return -1
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def countAlive(wheres):
+    count = 0
+    for i in range(len(wheres)):
+        if wheres[i] > 0:
+            count += 1
+    return count
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def countAliveLeft(xs, wheres, x):
+    countWhere, countLoc = 0, 0
+    for i in range(len(wheres)):
+        if wheres[i] != 0 and xs[i] < x:
+            countLoc += 1
+        if wheres[i] < 0:
+            countWhere += 1
+    if countLoc != countWhere:
+        print("problem ", countLoc, countWhere)
+        return -1
+    return countWhere
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def dot(a, b):
+    return a[0] * b[0] + a[1] * b[1]
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def norm(a):
+    return dot(a, a) ** 0.5
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def twoArraysToOne(x, y, mask, positions):
     """
     update content of positions according to coordinates stores in x1 and y1

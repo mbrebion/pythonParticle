@@ -16,7 +16,6 @@ class ComputedConstants:
     meanFreePath = None
     vStar = None
     nbPartTarget = None
-    nbPartCreated = None
     dt = None
     ds = None
     ms = None
@@ -32,6 +31,13 @@ class ComputedConstants:
     nbCells = None
     decoloringRatio = 0.85
     alphaAveraging = 0.025  # temperature and pressure averaging
+
+    # for wall
+
+
+    # for opengl
+    resX = None
+    resY = None
 
     @classmethod
     def thermodynamicSetup(cls, initTemp, length, width, initPressure, nbPartTarget, ls):
