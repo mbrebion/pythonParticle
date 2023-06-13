@@ -8,6 +8,7 @@ from coords import Coords
 
 class Cell:
     colorCollisions = True
+    collision = True
 
     def __init__(self, nbPart, effectiveTemp, left, right, startIndex, nbPartTarget=None):
         """
@@ -129,14 +130,21 @@ class Cell:
         """
 
         alpha = ComputedConstants.vStar * ComputedConstants.dt / ComputedConstants.length
-        self.instantPressure = (fup + fdown) / (2 * ComputedConstants.length)
+        self.instantPressure = (fup + fdown) / (2 * (self.right - self.left))
         self.averagedPressure = alpha * self.instantPressure + (1 - alpha) * self.averagedPressure
 
     def count(self):
-        return numbaAccelerated.countAlive(self.coords.wheres)
+        ct = numbaAccelerated.countAlive(self.coords.wheres)
+        if ct / self.arraySize > 0.92:
+            print("coords arrays arrays nearly saturated : ", ct / self.arraySize)
+        return ct
 
     def countLeft(self, x):
         out = numbaAccelerated.countAliveLeft(self.coords.xs, self.coords.wheres, x)
+        return out
+
+    def countRight(self, x):
+        out = numbaAccelerated.countAliveRight(self.coords.xs, self.coords.wheres, x)
         return out
 
     ##############################################################
@@ -239,6 +247,9 @@ class Cell:
     #################      Helper functions     ##################
     ##############################################################
 
+    def checkCorrectSide(self):
+        numbaAccelerated.checkCorrectSide(self.coords.wheres, self.coords.xs, self.wall.location())
+
     def updateConstants(self):
         self.upToDate = False  # invalidate position buffer
         self.computeTemperature()
@@ -250,8 +261,7 @@ class Cell:
         return self.positions
 
     def advect(self):
-        self.coords.xs += self.coords.vxs * ComputedConstants.dt
-        self.coords.ys += self.coords.vys * ComputedConstants.dt
+        numbaAccelerated.advect(self.coords.xs, self.coords.ys, self.coords.vxs, self.coords.vys, ComputedConstants.dt)
 
     def middle(self):
         return (self.left + self.right) * 0.5
@@ -273,9 +283,9 @@ class Cell:
     def update(self):
         self.advect()
 
-        self.sort()
-
-        self.collide()
+        if Cell.collision:
+            self.sort()
+            self.collide()
 
         self.wallBounce()
 
@@ -283,3 +293,4 @@ class Cell:
 
         if ComputedConstants.it + 400 % 500 == 0:
             self.improveCollisionDetectionSpeed()
+            self.count()

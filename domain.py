@@ -72,11 +72,30 @@ class Domain:
     ################## Compute thermodynamic      ################
     ##############################################################
 
+    def computePressure(self):
+        p = 0
+        for c in self.cells:
+            p += c.instantPressure / len(self.cells)  # average of pression over multiple cells
+        return p
+
+    def count(self):
+        count = 0
+        for c in self.cells:
+            count += c.count()
+        return count
+
     def countLeft(self):
         count = 0.
         x = self.wall.location()
         for c in self.cells:
             count += c.countLeft(x)
+        return count
+
+    def countRight(self):
+        count = 0.
+        x = self.wall.location()
+        for c in self.cells:
+            count += c.countRight(x)
         return count
 
     def computeKineticEnergyLeftSide(self):
@@ -105,6 +124,16 @@ class Domain:
         for cell in self.cells:
             out.append(cell.averagedTemperature)
         return out
+
+    def computeTemperature(self):
+        temp = 0
+        for c in self.cells:
+            temp += c.temperature
+        return temp / len(self.cells)
+
+    def checkSides(self):
+        for c in self.cells:
+            c.checkCorrectSide()
 
     ##############################################################
     ##################         Update      #######################

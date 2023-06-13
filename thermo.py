@@ -1,5 +1,5 @@
 # set of thermo functions used to compute simulation values from real values
-from math import pi
+
 
 def getKbSimu(pressure, volume, temperature, NSimu):
     """
@@ -13,7 +13,7 @@ def getKbSimu(pressure, volume, temperature, NSimu):
     return pressure * volume / (NSimu * temperature)
 
 
-def getMSimu(mass,Kb,Kbs):
+def getMSimu(mass, Kb, Kbs):
     """
     compute mass of simulated particles
     :param Kb: real Boltzmann constant
@@ -24,7 +24,8 @@ def getMSimu(mass,Kb,Kbs):
     """
     return mass * Kbs / Kb
 
-def getMeanFreePathSimulated(S,ds,Ns):
+
+def getMeanFreePathSimulated(S, ds, Ns):
     """
     compute the average mean free path
     :param S: Surface of cell
@@ -32,11 +33,12 @@ def getMeanFreePathSimulated(S,ds,Ns):
     :param Ns: number of simulated particle
     :return: average mean free path
     """
+    # 2**0.5 is here to take into account particle's movement
+
+    return S / (2 * 2 ** 0.5 * ds * Ns)
 
 
-    return S/(2 * 2**0.5 * ds * Ns)
-
-def getDiameter(S,Ns,ls):
+def getDiameter(S, Ns, ls):
     """
     compute the effective diameter of 2D particles to ensure a mean free path ls
     :param S: Surface of cell
@@ -46,9 +48,10 @@ def getDiameter(S,Ns,ls):
     :return: the diameter of simulated particle (in m)
     """
 
-    return S / (2*2**0.5 * Ns * ls)
+    return S / (2 * 2 ** 0.5 * Ns * ls)
 
-def getMeanSquareVelocity(KbS ,ms,temperature):
+
+def getMeanSquareVelocity(KbS, ms, temperature):
     """
     compute the mean square velocity (in 2D)
     :param KbS: boltzmann constant used in simulation
@@ -56,10 +59,10 @@ def getMeanSquareVelocity(KbS ,ms,temperature):
     :param temperature: real temperature
     :return: mean square velocity vStar in m/s
     """
-    return (2 * KbS/ ms * temperature)**0.5
+    return (2 * KbS / ms * temperature) ** 0.5
 
 
-def getDtCollision(meanSquareVelocity,l):
+def getDtCollision(meanSquareVelocity, l):
     """
     compute optimal time step in order to capture particle collisions
     :param meanSquareVelocity: mean quare velocity v*
@@ -69,7 +72,7 @@ def getDtCollision(meanSquareVelocity,l):
     return l / meanSquareVelocity * 0.05
 
 
-def getDtNoCollision(meanSquareVelocity,L):
+def getDtNoCollision(meanSquareVelocity, L):
     """
        compute optimal time step in order to capture particle collisions
        :param meanSquareVelocity: mean quare velocity v*

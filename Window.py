@@ -136,23 +136,19 @@ class Window:
             self.updateLabels()
 
         if self.timeStep % 50 == 0:
-            print(ComputedConstants.time, self.domain.wall.location(), self.domain.computeKineticEnergyLeftSide(), self.domain.countLeft())
+            print(ComputedConstants.time, self.domain.wall.location(), self.domain.countLeft(), self.domain.countRight(), self.domain.count())
 
 
 def velocity(t):
-    if t < 0.05:
-        return 0
-    if t < 0.55:
-        return -0.3
-    return 0.
+        return -45
 
 
 if __name__ == "__main__":
-    window = Window(5000, 1e5, 300, 1, 1, 40e-3, nbCells=4)
+    window = Window(2000, 1e5, 300, 1, 1, 40e-3, nbCells=4)
     window.domain.setMaxWorkers(1)
 
     window.domain.addMovingWall(1000, 0.5, 40, imposedVelocity=velocity)
-    ComputedConstants.dt /= 1
+    ComputedConstants.dt /= 2
     window.nStep = 1
     window.displayPerformance = True
     # Cell.colorCollisions = False

@@ -34,12 +34,12 @@ def moveToSwap(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, whe
     count = 0
     if kindOfLim:
         for i in range(len(xsa)):
-            if xsa[i] > xLim and wheresa[i] > 0:
+            if xsa[i] > xLim and wheresa[i] != 0:
                 fromAtoB(i, count, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
                 count += 1
     else:
         for i in range(len(xsa)):
-            if xsa[i] < xLim and wheresa[i] > 0:
+            if xsa[i] < xLim and wheresa[i] != 0:
                 fromAtoB(i, count, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
                 count += 1
 
@@ -75,7 +75,7 @@ def indicesToSwapRight(xs, xmax, wheres, indices):
     newIndex = 0
 
     for i in range(len(xs)):
-        if xs[i] > xmax and wheres[i] > 0:
+        if xs[i] > xmax and wheres[i] != 0:
             indices[newIndex] = i
             newIndex += 1
     return newIndex
@@ -97,7 +97,7 @@ def indicesToSwapLeft(xs, xmin, wheres, indices):
     newIndex = 0
 
     for i in range(len(xs)):
-        if xs[i] < xmin and wheres[i] > 0:
+        if xs[i] < xmin and wheres[i] != 0:
             indices[newIndex] = i
             newIndex += 1
     return newIndex
@@ -213,12 +213,10 @@ def movingWallInteraction(xs, vxs, wheres, x, v, dt, mp, m):
     fpl = 0.
     fpr = 0.
     for i in range(len(xs)):
-        if wheres[i] == 0:
-            continue
 
         # bounce on moving wall must be taken into account more precisely
 
-        if (wheres[i] < 0 and xs[i] > x) or (wheres[i] > 0 and xs[i] < x):
+        if wheres[i] * (xs[i] - x) < 0:
             # particle crossed the wall, in either direction
             delta = -(xs[i] - x) / (v - vxs[i])
 
@@ -234,6 +232,7 @@ def movingWallInteraction(xs, vxs, wheres, x, v, dt, mp, m):
                 fpl += - (newV - vxs[i]) * mp / dt
             else:
                 fpr += - (newV - vxs[i]) * mp / dt
+
             vxs[i] = newV
 
             # move forward the particle
@@ -408,7 +407,7 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloring
             continue
 
         for j in range(i + 1, min(len(xs), i + nbSearch)):
-            if wheres[j] == 0 or (wheres[i] * wheres[j] < 0):
+            if wheres[i] * wheres[j] <= 0:  # different side (<0) or one dead particle (==0)
                 continue
 
             coll, t = isCollidingFast(xs[i], ys[i], xs[j], ys[j], vxs[i], vys[i], vxs[j], vys[j], dt, d)
@@ -529,7 +528,7 @@ def retieveIndex(id, wheres):
 def countAlive(wheres):
     count = 0
     for i in range(len(wheres)):
-        if wheres[i] > 0:
+        if wheres[i] != 0:
             count += 1
     return count
 
@@ -544,8 +543,27 @@ def countAliveLeft(xs, wheres, x):
             countWhere += 1
     if countLoc != countWhere:
         print("problem ", countLoc, countWhere)
-        return -1
     return countWhere
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def countAliveRight(xs, wheres, x):
+    countWhere, countLoc = 0, 0
+    for i in range(len(wheres)):
+        if wheres[i] != 0 and xs[i] > x:
+            countLoc += 1
+        if wheres[i] > 0:
+            countWhere += 1
+    if countLoc != countWhere:
+        print("problem ", countLoc, countWhere)
+    return countWhere
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def checkCorrectSide(wheres, xs, x):
+    for i in range(len(xs)):
+        if wheres[i] * (xs[i] - x) < 0:
+            print("      ", wheres[i], xs[i], x)
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
@@ -573,3 +591,19 @@ def twoArraysToOne(x, y, mask, positions):
             positions[i, 0], positions[i, 1] = x[i], y[i]
         else:
             positions[i, 0], positions[i, 1] = -10, -10
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def advect(xs, ys, vxs, vys, dt):
+    """
+
+    :param xs: x position
+    :param ys:
+    :param vxs: x velocity
+    :param vys:
+    :param dt: time step
+    :return:
+    """
+    for i in range(len(xs)):
+        xs[i] += vxs[i] * dt
+        ys[i] += vys[i] * dt
