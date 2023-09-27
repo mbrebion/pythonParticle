@@ -36,7 +36,7 @@ void main() {
     vec2 p = gl_FragCoord.xy - v_center;
     float a = 1.0;
     float d = length(p)-v_radius*0.99;
-    if(d > 0.0) a = exp(-d*d);
+    if(d > 0.0) a = exp(-4*d*d);
     gl_FragColor = vec4(v_color, a);    
 }
 """

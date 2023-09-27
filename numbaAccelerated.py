@@ -208,7 +208,7 @@ def movingWallInteraction(xs, vxs, wheres, x, v, dt, mp, m):
         :param mp : mass of particle
         :param m : mass of wall
 
-        :return: Force applied to wall
+        :return: Force applied to wall at both sides
         """
     fpl = 0.
     fpr = 0.
@@ -242,7 +242,7 @@ def movingWallInteraction(xs, vxs, wheres, x, v, dt, mp, m):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInteractionLeft(xs, vxs, wheres, left):
+def staticWallInteractionLeft(xs, vxs, wheres, left,dt, m):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
@@ -250,8 +250,12 @@ def staticWallInteractionLeft(xs, vxs, wheres, left):
         :param vxs: array containing x velocities of particles
         :param wheres: mask array
         :param left: left coordinate of cell
-        :return: None
+        :param dt: time step for simulation (all collision between particles and walls occurred within dt)
+        :param m: mass of particles (all supposed equals)
+        return: fleft (computed positively)
         """
+
+    fleft = 0.
     for i in range(len(xs)):
         if wheres[i] == 0:
             continue
@@ -259,10 +263,11 @@ def staticWallInteractionLeft(xs, vxs, wheres, left):
         if xs[i] < left:
             xs[i] = 2 * left - xs[i]
             vxs[i] = - vxs[i]
-
+            fleft += abs(vxs[i])
+    return fleft * 2 * m / dt
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInteractionRight(xs, vxs, wheres, right):
+def staticWallInteractionRight(xs, vxs, wheres, right,dt, m):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
@@ -270,9 +275,12 @@ def staticWallInteractionRight(xs, vxs, wheres, right):
         :param vxs: array containing x velocities of particles
         :param wheres: mask array
         :param right: right coordinate of cell
-        :return: None
+        :param dt: time step for simulation (all collision between particles and walls occurred within dt)
+        :param m: mass of particles (all supposed equals)
+        return: fright (computed positively)
         """
 
+    fright = 0.
     for i in range(len(xs)):
         if wheres[i] == 0:
             continue
@@ -280,7 +288,8 @@ def staticWallInteractionRight(xs, vxs, wheres, right):
         if xs[i] > right:
             xs[i] = 2 * right - xs[i]
             vxs[i] = - vxs[i]
-
+            fright += abs(vxs[i])
+    return fright * 2 * m / dt
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def staticWallInterractionUpAndDown(ys, vys, wheres, width, dt, m):
@@ -341,32 +350,6 @@ def computeEcs(vxs, vys, wheres, m):
         else:
             ecr += m * vc / 2
     return ecl, ecr
-
-
-@jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def computeAverageTemperature(vxs, vys, wheres, m, kb):
-    """
-    compute average temperature in cell
-    :param vxs: x velocities
-    :param vys: y velocities
-    :param wheres: mask array
-
-    :param m: mass
-    :param kb: boltzmann constant
-    :return: averaged temperature
-    """
-
-    vc = 0
-    n = 0
-    for i in range(len(vxs)):
-        if wheres[i] == 0:
-            continue
-        n += 1
-        vc += vxs[i] ** 2 + vys[i] ** 2
-    if n == 0:
-        return 0
-
-    return m * vc / (2 * kb * n)
 
 
 ##############################################################
@@ -498,11 +481,15 @@ def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
 
     if delta >= 0:
         t = (-b + delta ** 0.5) / (2 * a)
-        if t < 0 or t > dt:
-
+        if t < 0:
+            return False, 0.
+        elif t > dt:
+            if (x1-x2)**2 + (y1-y2)**2 < d**2 and t < 10*dt:
+                # in this case, collision has really occurred, but before this time step.
+                # it must be treated.
+                return True, t#min(t,4*dt)
             return False, 0.
         else:
-
             return True, t
 
 

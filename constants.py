@@ -1,4 +1,5 @@
 import thermo
+import math
 
 MASS = 4.83e-26  # kg ; mean mass of air particle
 Kb = 1.38e-23  # USI ; Boltzmann constant
@@ -132,6 +133,6 @@ class ComputedConstants:
         print("tau : ", "{:.2e}".format(cls.ls / cls.vStar), " s")
         print("d/l : ", "{:.2e}".format(cls.ds / cls.ls), " ")
         print("dt : ", "{:.5e}".format(cls.dt), " s")
-        print("fill ratio s_parts/S : ", "{:.5e}".format( (cls.ds/2)**2 * 3.14159 * cls.nbPartTarget / cls.surface ))
+        print("fill ratio s_parts/S : ", "{:.5e}".format( (cls.ds/2)**2 * math.pi * cls.nbPartTarget / cls.surface ))
         print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
         print()

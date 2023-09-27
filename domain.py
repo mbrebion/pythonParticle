@@ -76,6 +76,7 @@ class Domain:
         p = 0
         for c in self.cells:
             p += c.instantPressure / len(self.cells)  # average of pression over multiple cells
+
         return p
 
     def count(self):
@@ -126,10 +127,7 @@ class Domain:
         return out
 
     def computeTemperature(self):
-        temp = 0
-        for c in self.cells:
-            temp += c.temperature
-        return temp / len(self.cells)
+        return self.computeKineticEnergy() / ComputedConstants.nbPartTarget / ComputedConstants.kbs
 
     def checkSides(self):
         for c in self.cells:

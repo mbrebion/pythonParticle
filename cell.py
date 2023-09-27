@@ -1,6 +1,6 @@
+import math
+
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.collections import PatchCollection
 import numbaAccelerated
 from constants import *
 from coords import Coords
@@ -29,9 +29,11 @@ class Cell:
         if nbPartTarget is None:
             nbPartTarget = self.nbPart
         self.arraySize = int(nbPartTarget * INITSIZEEXTRARATIO)
-        nb = max(nbPartTarget // 100, 30)
+        nb = max(nbPartTarget // 20, 30)
 
         self.histo = np.zeros(nb, dtype=int)
+        #self.histo = np.zeros(300, dtype=int)
+
         # the amount of neighbors checked for collisions is adapted dynamically to ensure fast computations
         # and miss less than 0.1 % of collisions
 
@@ -92,9 +94,37 @@ class Cell:
         self.coords.vys /= ratio
 
         # locations and states
+        # random init
         self.coords.xs = self.left + (np.random.random(self.arraySize)) * self.length
         for i in range(self.arraySize):
             self.coords.ys[i] = (i + 0.5) * ComputedConstants.width / self.arraySize
+
+        # cristal init
+        L = self.length
+        H = ComputedConstants.width
+        deltax = math.sqrt( 2 * L*H / self.nbPart / math.sqrt(3.))
+        deltay = deltax * math.sqrt(3)/2
+
+        nx = int(0.5 + self.length / deltax)
+        ny = int(0.5 + self.length / deltay)
+
+
+        if (nx - 1) * ny >= self.nbPart:
+            nx = nx - 1
+
+        if nx*(ny-1)>=self.nbPart:
+            ny = ny-1
+
+        deltax = deltax * (nx / (nx+1))**0.5
+        deltay = deltay * (ny / (ny+1))**0.5
+
+        for ind in indices[0]:
+            id = self.coords.wheres[ind]-1
+            i = id % nx
+            j = id // nx
+            self.coords.xs[ind] = i*deltax + deltax/4 * (-1)**(j % 2) + 2*deltax/3
+            self.coords.ys[ind] = j * deltay + 2*deltay/3
+
 
         self.sort()
 
@@ -110,27 +140,39 @@ class Cell:
         :return: kinetic energies (left and right of wall)
         """
         self.ecl, self.ecr = numbaAccelerated.computeEcs(self.coords.vxs, self.coords.vys, self.coords.wheres, ComputedConstants.ms)
+        self.ec = self.ecl + self.ecr
         return self.ecl, self.ecr
 
     def computeTemperature(self):
-        self.temperature = numbaAccelerated.computeAverageTemperature(self.coords.vxs, self.coords.vys, self.coords.wheres, ComputedConstants.ms,
-                                                                      ComputedConstants.kbs)
-
+        ecl, ecr = numbaAccelerated.computeEcs(self.coords.vxs, self.coords.vys, self.coords.wheres, ComputedConstants.ms)
+        self.temperature = (ecl+ecr) / (self.nbPart * ComputedConstants.kbs)
         alpha = ComputedConstants.alphaAveraging
         self.averagedTemperature = alpha * self.temperature + (1 - alpha) * self.averagedTemperature
 
         return self.temperature
 
-    def computePressure(self, fup, fdown):
+    def computePressure(self, fup, fdown, fleft, fright):
         """
         update instant and average pressure
         :param fup: last computed force on upper wall (in N)
         :param fdown: last computed force on lower wall (in N)
+        :param fleft: last computed force on left static wall (in N), negative if not provided
+        :param fright: last computed force on right static wall (in N), negative if not provided
         :return: None
         """
+        nbWall = 2
+        self.instantPressure = (fup + fdown) / (1 * (self.right - self.left))
+        if fleft >= 0:
+            self.instantPressure += fleft / ComputedConstants.width
+            nbWall += 1
+
+        if fright >= 0:
+            self.instantPressure += fright / ComputedConstants.width
+            nbWall += 1
+        self.instantPressure /= nbWall
 
         alpha = ComputedConstants.vStar * ComputedConstants.dt / ComputedConstants.length
-        self.instantPressure = (fup + fdown) / (2 * (self.right - self.left))
+
         self.averagedPressure = alpha * self.instantPressure + (1 - alpha) * self.averagedPressure
 
     def count(self):
@@ -182,7 +224,8 @@ class Cell:
         fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.coords.ys, self.coords.vys, self.coords.wheres, ComputedConstants.width,
                                                                       ComputedConstants.dt,
                                                                       ComputedConstants.ms)
-        self.computePressure(fup, fdown)
+        fleft = -1
+        fright = -1
 
         # moving Wall
         if self.wall is not None:
@@ -192,11 +235,15 @@ class Cell:
 
         # left wall
         if self.leftCell is None:
-            numbaAccelerated.staticWallInteractionLeft(self.coords.xs, self.coords.vxs, self.coords.wheres, self.left)
+            fleft = numbaAccelerated.staticWallInteractionLeft(self.coords.xs, self.coords.vxs, self.coords.wheres, self.left, ComputedConstants.dt,
+                                                               ComputedConstants.ms)
 
         # right wall
         if self.rightCell is None:
-            numbaAccelerated.staticWallInteractionRight(self.coords.xs, self.coords.vxs, self.coords.wheres, self.right)
+            fright = numbaAccelerated.staticWallInteractionRight(self.coords.xs, self.coords.vxs, self.coords.wheres, self.right, ComputedConstants.dt,
+                                                                 ComputedConstants.ms)
+
+        self.computePressure(fup, fdown, fleft, fright)
 
     def collide(self):
         """
@@ -291,6 +338,8 @@ class Cell:
 
         self.updateConstants()
 
-        if ComputedConstants.it + 400 % 500 == 0:
+
+        if (ComputedConstants.it + 450) % 500 == 0:
+
             self.improveCollisionDetectionSpeed()
             self.count()

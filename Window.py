@@ -135,8 +135,9 @@ class Window:
         if self.timeStep % 100 == 0 and self.displayPerformance:
             self.updateLabels()
 
-        if self.timeStep % 50 == 0:
-            print(ComputedConstants.time, self.domain.wall.location(), self.domain.countLeft(), self.domain.countRight(), self.domain.count())
+
+        #if self.timeStep % 50 == 0:
+        #    print(ComputedConstants.time, self.domain.wall.location(), self.domain.countLeft(), self.domain.countRight(), self.domain.count())
 
 
 def velocity(t):
