@@ -4,13 +4,14 @@ import numpy as np
 import numbaAccelerated
 from constants import *
 from coords import Coords
+from thermo import getMeanSquareVelocity
 
 
 class Cell:
     colorCollisions = True
     collision = True
 
-    def __init__(self, nbPart, effectiveTemp, left, right, startIndex, nbPartTarget=None):
+    def __init__(self, nbPart, effectiveTemp, left, right, startIndex, nbPartTarget=None,v_xYVelocityProfile=None):
         """
         Create a cell
         :param nbPart: effective number of part in cell
@@ -18,21 +19,26 @@ class Cell:
         :param left: left coordinate of cell
         :param right: right coordinate of cell
         :param startIndex: first id of particle lying in this cell
+        :param nbPartTarget: target numer of particles. Useful if initial number of particle is way lower than the target
+        :param v_xYVelocityProfile: v_x(y) mean velocity profile to be imposed at startup
         """
 
         self.left = left
         self.right = right
         self.length = self.right - self.left
         self.startIndex = startIndex
+        if v_xYVelocityProfile is not None:
+            self.v_xYVelocityProfile = v_xYVelocityProfile
+        else :
+            self.v_xYVelocityProfile = self.zeroV_xYVelocityProfile
 
         self.nbPart = nbPart
         if nbPartTarget is None:
             nbPartTarget = self.nbPart
         self.arraySize = int(nbPartTarget * INITSIZEEXTRARATIO)
-        nb = max(nbPartTarget // 20, 30)
+        nb = min(int(nbPartTarget**0.5+20), 200)
 
         self.histo = np.zeros(nb, dtype=int)
-        #self.histo = np.zeros(300, dtype=int)
 
         # the amount of neighbors checked for collisions is adapted dynamically to ensure fast computations
         # and miss less than 0.1 % of collisions
@@ -80,11 +86,14 @@ class Cell:
         # wall
         self.wall = None
 
+    def zeroV_xYVelocityProfile(self,y):
+        return 0.
+
     def randomInit(self, effectiveTemp):
         vStar = thermo.getMeanSquareVelocity(ComputedConstants.kbs, ComputedConstants.ms, effectiveTemp)
 
-        self.coords.vxs = np.random.normal(0, vStar / 2 ** 0.5, self.arraySize)
-        self.coords.vys = np.random.normal(0, vStar / 2 ** 0.5, self.arraySize)
+        self.coords.vxs = np.random.normal(0, vStar/2**0.5, self.arraySize)
+        self.coords.vys = np.random.normal(0, vStar/2**0.5, self.arraySize)
 
         # enforce true temperature
         indices = np.nonzero(self.coords.wheres != DEAD)
@@ -94,37 +103,41 @@ class Cell:
         self.coords.vys /= ratio
 
         # locations and states
-        # random init
-        self.coords.xs = self.left + (np.random.random(self.arraySize)) * self.length
+        if ComputedConstants.fillRatio < 0.1:
+            # random init
+            self.coords.xs = self.left + (np.random.random(self.arraySize)) * self.length
+            for i in range(self.arraySize):
+                self.coords.ys[i] = (i + 0.5) * ComputedConstants.width / self.arraySize
+        else:
+            # cristal like init
+            L = self.length
+            H = ComputedConstants.width
+            deltax = math.sqrt( 2 * L*H / self.nbPart / math.sqrt(3.))
+            deltay = deltax * math.sqrt(3)/2
+
+            nx = int(0.5 + self.length / deltax)
+            ny = int(0.5 + self.length / deltay)
+
+            if (nx - 1) * ny >= self.nbPart:
+                nx = nx - 1
+
+            if nx*(ny-1)>=self.nbPart:
+                ny = ny-1
+
+            deltax = deltax * (nx / (nx+1))**0.5
+            deltay = deltay * (ny / (ny+1))**0.5
+
+            id0 = self.coords.wheres[indices[0][0]]-1
+            for ind in indices[0]:
+                id = self.coords.wheres[ind]-1
+
+                i = (id-id0) % nx
+                j = (id-id0) // nx
+                self.coords.xs[ind] = self.left + i*deltax + deltax/4 * (-1)**(j % 2) + 2*deltax/3
+                self.coords.ys[ind] = j * deltay + 2*deltay/3
+
         for i in range(self.arraySize):
-            self.coords.ys[i] = (i + 0.5) * ComputedConstants.width / self.arraySize
-
-        # cristal init
-        L = self.length
-        H = ComputedConstants.width
-        deltax = math.sqrt( 2 * L*H / self.nbPart / math.sqrt(3.))
-        deltay = deltax * math.sqrt(3)/2
-
-        nx = int(0.5 + self.length / deltax)
-        ny = int(0.5 + self.length / deltay)
-
-
-        if (nx - 1) * ny >= self.nbPart:
-            nx = nx - 1
-
-        if nx*(ny-1)>=self.nbPart:
-            ny = ny-1
-
-        deltax = deltax * (nx / (nx+1))**0.5
-        deltay = deltay * (ny / (ny+1))**0.5
-
-        for ind in indices[0]:
-            id = self.coords.wheres[ind]-1
-            i = id % nx
-            j = id // nx
-            self.coords.xs[ind] = i*deltax + deltax/4 * (-1)**(j % 2) + 2*deltax/3
-            self.coords.ys[ind] = j * deltay + 2*deltay/3
-
+            self.coords.vxs[i] += self.v_xYVelocityProfile(self.coords.ys[i])
 
         self.sort()
 
@@ -133,6 +146,20 @@ class Cell:
     ##############################################################
     ################## Compute thermodynamic      ################
     ##############################################################
+    def computeXVelocity(self):
+        """
+        :return: the averaged X velocity of the cell
+        """
+        return numbaAccelerated.ComputeXVelocity(self.coords.vxs,self.coords.wheres)
+
+    def computeXVelocityBins(self,nbBins):
+        """
+        :param nbBins: number of bins
+        :return: the averaged X velocity in bins
+        """
+        bins = np.array([0.]*nbBins)
+
+        return numbaAccelerated.ComputeXVelocityBins(self.coords.ys, ComputedConstants.width,self.coords.vxs,self.coords.wheres,bins)
 
     def computeKineticEnergy(self):
         """
@@ -204,6 +231,10 @@ class Cell:
         if self.rightCell is not None:
             numbaAccelerated.moveSwapToNeighbor(*self.rightSwap.tpl, *self.rightCell.coords.tpl, self.rightSwap.alive, ComputedConstants.width)
 
+
+    def applyPeriodic(self):
+        numbaAccelerated.moveperiodically(self.coords.xs,ComputedConstants.length)
+
     def prepareSwap(self):
         """
         identify particles to be swapped and move them to swap arrays
@@ -212,35 +243,47 @@ class Cell:
         if self.leftCell is not None:
             self.leftSwap.alive = numbaAccelerated.moveToSwap(*self.coords.tpl, *self.leftSwap.tpl, self.left, False)
 
+
         if self.rightCell is not None:
             self.rightSwap.alive = numbaAccelerated.moveToSwap(*self.coords.tpl, *self.rightSwap.tpl, self.right, True)
+
 
     ##############################################################
     #################   Wall and Collision       #################
     ##############################################################
 
     def wallBounce(self):
+
+
+
         # up and down
-        fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.coords.ys, self.coords.vys, self.coords.wheres, ComputedConstants.width,
-                                                                      ComputedConstants.dt,
-                                                                      ComputedConstants.ms)
-        fleft = -1
-        fright = -1
+        vStarBoundary = -1
+        if ComputedConstants.boundaryTemperature > 0:
+            vStarBoundary = getMeanSquareVelocity(ComputedConstants.kbs, ComputedConstants.ms, ComputedConstants.boundaryTemperature)
+
+        fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.coords.ys, self.coords.vxs, self.coords.vys, self.coords.wheres, ComputedConstants.width,
+                                                                      ComputedConstants.dt,ComputedConstants.ms,
+                                                                      vStarBoundary)
 
         # moving Wall
         if self.wall is not None:
-            fpl, fpr = numbaAccelerated.movingWallInteraction(self.coords.xs, self.coords.vxs, self.coords.wheres, self.wall.location(), self.wall.velocity(),
+            fpl, fpr = numbaAccelerated.movingWallInteraction(self.coords.xs, self.coords.vxs, self.coords.vys, self.coords.wheres, self.wall.location(),
+                                                              self.wall.velocity(),
                                                               ComputedConstants.dt, ComputedConstants.ms, self.wall.mass())
             self.wall.addToForce(fpl, fpr)
 
+        fleft = -1
+        fright = -1
+
+
         # left wall
-        if self.leftCell is None:
-            fleft = numbaAccelerated.staticWallInteractionLeft(self.coords.xs, self.coords.vxs, self.coords.wheres, self.left, ComputedConstants.dt,
+        if self.leftCell is None and not ComputedConstants.periodic:
+            fleft = numbaAccelerated.staticWallInteractionLeft(self.coords.xs, self.coords.vxs,self.coords.vys, self.coords.wheres, self.left, ComputedConstants.dt,
                                                                ComputedConstants.ms)
 
         # right wall
-        if self.rightCell is None:
-            fright = numbaAccelerated.staticWallInteractionRight(self.coords.xs, self.coords.vxs, self.coords.wheres, self.right, ComputedConstants.dt,
+        if self.rightCell is None and not ComputedConstants.periodic:
+            fright = numbaAccelerated.staticWallInteractionRight(self.coords.xs, self.coords.vxs,self.coords.vys, self.coords.wheres, self.right, ComputedConstants.dt,
                                                                  ComputedConstants.ms)
 
         self.computePressure(fup, fdown, fleft, fright)
@@ -270,7 +313,8 @@ class Cell:
         """
         ln = len(self.histo)
         h = np.array(self.histo, dtype=float)
-        h /= np.sum(h)
+
+        h /= (np.sum(h))
         h *= 100
         k = 1
         for i in range(1, ln):
@@ -282,9 +326,10 @@ class Cell:
         for i in range(k, ln):
             Sk += h[i]
         xk = 1 - h[k] / Sk
-
-        DeltaMax = int(0.5 + k + np.log(0.1 / Sk) / np.log(xk))
-
+        try:
+            DeltaMax = max(int(0.5 + k + np.log(0.1 / Sk) / np.log(xk)),12)
+        except:
+            DeltaMax = 100
         self.histo = np.zeros(DeltaMax, dtype=int)
 
     def sort(self):
@@ -299,7 +344,7 @@ class Cell:
 
     def updateConstants(self):
         self.upToDate = False  # invalidate position buffer
-        self.computeTemperature()
+        #self.computeTemperature()
 
     def getPositionsBuffer(self):
         if not self.upToDate:
@@ -308,7 +353,7 @@ class Cell:
         return self.positions
 
     def advect(self):
-        numbaAccelerated.advect(self.coords.xs, self.coords.ys, self.coords.vxs, self.coords.vys, ComputedConstants.dt)
+        numbaAccelerated.advect(self.coords.xs, self.coords.ys, self.coords.vxs, self.coords.vys, ComputedConstants.dt,ComputedConstants.forceX, ComputedConstants.ms)
 
     def middle(self):
         return (self.left + self.right) * 0.5
@@ -338,8 +383,8 @@ class Cell:
 
         self.updateConstants()
 
+        if (ComputedConstants.it + 250) % 500 == 0:
 
-        if (ComputedConstants.it + 450) % 500 == 0:
-
-            self.improveCollisionDetectionSpeed()
+            if Cell.collision:
+                self.improveCollisionDetectionSpeed()
             self.count()

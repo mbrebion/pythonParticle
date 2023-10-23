@@ -1,45 +1,45 @@
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
+font = {'family': 'times',
+        'size': 20}
 
-
+matplotlib.rc('font', **font)
 
 plt.grid()
-plt.xlabel("x/x0")
-plt.ylabel("E_c * x / (E_c *x)_0" )
-#plt.ylim(0.8,1.25)
-plt.ylim(0.95,1.05)
+plt.xlabel("$x$")
+plt.ylabel("$E_c \\times  (Hx - 2Ns) $" )
+#plt.ylim(0.95,1.05)
 
-def fun(ec,x,corr):
-    return ec * (x**(1)*0.1 -corr)
+# 12000 particles, ls=Y/25
 
-def addPlot(name,display,corr):
-
+def addPlot(name,display):
     f = open(name,"r")
     ts=[]
     xs = []
     Ecs = []
-    Ss = []
+    cstes = []
     for l in f:
-        t,x,Ec,Ecr = l.split()
+        t,x,Ec,Ecr,cste = l.split()
         ts.append(float(t))
         xs.append(float(x))
         Ecs.append(float(Ec))
-        Ss.append(1*float(x))
-    Ecs = np.array(Ecs)
+        cstes.append((float(cste)))
+
     xs = np.array(xs)
+    cstes = np.array(cstes)
 
+    plt.plot(xs , cstes ,display, label = name)
 
-    init = fun(Ecs[0], xs[0],corr)
-    plt.plot((xs*0.1-corr)/(xs[0]*0.1-corr) , fun(Ecs,xs,corr) / init ,display, label = name)
-
-addPlot("dc2mm.txt", "--g",0.000076691*2*4/5)
-addPlot("dc2mmLowRes.txt", "-.r",0.000076691*4/5)
-#addPlot("dc5mm.txt", "-k")
-#addPlot("dc10mm.txt", "--r")
-#addPlot("dc10mmBis.txt", "+")
-#addPlot("dc20mm.txt", "-.b")
-#addPlot("dc20mmLowRes.txt", "*")
-
+addPlot("0p05mps.txt", "-.k")
+addPlot("0p25mps.txt", "--g")
+addPlot("1mps.txt", "--b")
+addPlot("5mps.txt", "--r")
+addPlot("15mps.txt", "--y")
+addPlot("45mps.txt", "-.g")
+addPlot("90mps.txt", "-.b")
+addPlot("90mpsbis.txt", "-.k")
+addPlot("180mps.txt", "-.r")
 
 plt.legend()
 plt.show()

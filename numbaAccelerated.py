@@ -1,5 +1,22 @@
+from random import getrandbits
+
+
 from numba import jit
 import numpy as np
+##############################################################
+############### Left Right periodic boundaries ###############
+##############################################################
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def moveperiodically(xs,rightLimit):
+    """
+    Ensure particules remains in the [0,rightlimit] x-space.
+    :param xs: array containing w coordinates
+    :param rightLimit: right limit.
+    :return: None
+    """
+    for i in range(len(xs)):
+        if xs[i] > rightLimit or xs[i]<0:
+            xs[i] = xs[i] % rightLimit
 
 
 ##############################################################
@@ -195,12 +212,13 @@ def sortCell(xs, ys, vxs, vys, wheres, colors):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def movingWallInteraction(xs, vxs, wheres, x, v, dt, mp, m):
+def movingWallInteraction(xs, vxs,vys, wheres, x, v, dt, mp, m):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
         :param xs: array containing x coordinates of particles
         :param vxs: array containing x velocities of particles
+        :param vys: array containing x velocities of particles
         :param wheres: mask array
         :param x : x coordinate of wall
         :param v : velocity coordinate of wall
@@ -220,6 +238,9 @@ def movingWallInteraction(xs, vxs, wheres, x, v, dt, mp, m):
             # particle crossed the wall, in either direction
             delta = -(xs[i] - x) / (v - vxs[i])
 
+            if delta < 0 : # already treated collision
+                continue
+
             # move backward the particle
             xs[i] -= vxs[i] * delta
 
@@ -234,6 +255,7 @@ def movingWallInteraction(xs, vxs, wheres, x, v, dt, mp, m):
                 fpr += - (newV - vxs[i]) * mp / dt
 
             vxs[i] = newV
+            #vys[i] *= (-1)**getrandbits(1)
 
             # move forward the particle
             xs[i] += vxs[i] * delta
@@ -242,12 +264,13 @@ def movingWallInteraction(xs, vxs, wheres, x, v, dt, mp, m):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInteractionLeft(xs, vxs, wheres, left,dt, m):
+def staticWallInteractionLeft(xs, vxs,vys, wheres, left,dt, m):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
         :param xs: array containing x coordinates of particles
         :param vxs: array containing x velocities of particles
+        :param vys: array containing x velocities of particles
         :param wheres: mask array
         :param left: left coordinate of cell
         :param dt: time step for simulation (all collision between particles and walls occurred within dt)
@@ -262,17 +285,20 @@ def staticWallInteractionLeft(xs, vxs, wheres, left,dt, m):
 
         if xs[i] < left:
             xs[i] = 2 * left - xs[i]
-            vxs[i] = - vxs[i]
+            vxs[i] *= -1
+            #vys[i] *= (-1) ** getrandbits(1)
+
             fleft += abs(vxs[i])
     return fleft * 2 * m / dt
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInteractionRight(xs, vxs, wheres, right,dt, m):
+def staticWallInteractionRight(xs, vxs,vys, wheres, right,dt, m):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
         :param xs: array containing x coordinates of particles
         :param vxs: array containing x velocities of particles
+        :param vys: array containing y velocities of particles
         :param wheres: mask array
         :param right: right coordinate of cell
         :param dt: time step for simulation (all collision between particles and walls occurred within dt)
@@ -287,39 +313,55 @@ def staticWallInteractionRight(xs, vxs, wheres, right,dt, m):
 
         if xs[i] > right:
             xs[i] = 2 * right - xs[i]
-            vxs[i] = - vxs[i]
+            vxs[i] *= -1
+            #vys[i] *= (-1)** getrandbits(1)
             fright += abs(vxs[i])
     return fright * 2 * m / dt
 
+
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInterractionUpAndDown(ys, vys, wheres, width, dt, m):
+def staticWallInterractionUpAndDown(ys,vxs, vys, wheres, width, dt, m,vStar):
     """
     update coordinates and velocities of particles interacting with solid walls (which are horizontal)
     Compute the forces applied to both walls
 
     :param ys: array containing y coordinates of particles
+    :param vxs: array containing y velocities of particles
     :param vys: array containing y velocities of particles
     :param wheres: mask array
     :param width: width of the cell
     :param dt: time step for simulation (all collision between particles and walls occurred within dt)
     :param m: mass of particles (all supposed equals)
+    :param vStar: quadratic mean velocity
     :return: fup,fdown, the two forces (computed positively)
     """
     fup, fdown = 0., 0.
+    sqtwo = (4/3)**0.5
 
     for i in range(len(ys)):
         if wheres[i] == 0:
             continue
 
+        bounce = False
         if ys[i] < 0:
-            ys[i] = -ys[i]
-            vys[i] = - vys[i]
-            fdown += abs(vys[i])  # f = 2 * vy * m * dn / dt
+            ys[i] *= -1
+            bounce = True
 
-        if ys[i] > width:
+        elif ys[i] > width:
             ys[i] = 2 * width - ys[i]
-            vys[i] = - vys[i]
-            fup += abs(vys[i])  # f = -2 * vy * ms * dn / dt
+            vys[i] *= -1
+            #bounce = True
+
+        if bounce:
+            vOld = vys[i]
+            if vStar > 0:
+                vxs[i] = np.random.normal(0, vStar/sqtwo, 1)[0]
+                vys[i] = - abs(np.random.normal(0, vStar/sqtwo, 1)[0]) * vOld/abs(vOld)
+            else:
+                #vxs[i] *= (-1)**getrandbits(1)
+                vys[i] *= -1
+
+            fup += abs(vys[i]-vOld)/2  # f = -2 * vy * ms * dn / dt
 
     return fdown * 2 * m / dt, fup * 2 * m / dt
 
@@ -327,6 +369,74 @@ def staticWallInterractionUpAndDown(ys, vys, wheres, width, dt, m):
 ##############################################################
 ##########  Average temperature and kinetic energy ###########
 ##############################################################
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def ComputeXVelocityBinsOld(ys,ymax,vxs,wheres,bins):
+    """
+    :param ys:  y positions
+    :param ymax:  max y value
+    :param vxs: x velocities
+    :param wheres: mask array
+    :param bins: list dedicated to store the means
+    :return: modified bins
+    """
+    ns = [0.]*len(bins)
+    delta = ymax/(len(bins)-1)
+    for i in range(len(vxs)):
+        if wheres[i] == 0:
+            continue
+        k = int(ys[i]/delta)
+        alphakp = (ys[i] - k * delta) / delta
+        alphak = 1 - alphakp
+
+        bins[k] += vxs[i] * alphak
+        ns[k] += alphak
+        bins[k+1] += vxs[i] * alphakp
+        ns[k+1] += alphakp
+
+    for i in range(len(bins)):
+        bins[i] /= max(ns[i],1)
+    return bins
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def ComputeXVelocityBins(ys,ymax,vxs,wheres,bins):
+    """
+    :param ys:  y positions
+    :param ymax:  max y value
+    :param vxs: x velocities
+    :param wheres: mask array
+    :param bins: list dedicated to store the means
+    :return: modified bins
+    """
+    ns = [0]*len(bins)
+    for i in range(len(vxs)):
+        if wheres[i] == 0:
+            continue
+        index = int(ys[i]/ymax * len(bins))
+        bins[index]+=vxs[i]
+        ns[index] +=1
+
+    for i in range(len(bins)):
+        bins[i] /= max(ns[i],1)
+    return bins
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def ComputeXVelocity(vxs,wheres):
+    """
+
+    :param vxs: x velocities
+    :param wheres: mask array
+    :return: X averaged velocity of the cell
+    """
+    vx = 0.
+    n = 0
+    for i in range(len(vxs)):
+        if wheres[i] == 0:
+            continue
+        vx += vxs[i]
+        n += 1
+    return vx/n
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def computeEcs(vxs, vys, wheres, m):
@@ -581,16 +691,21 @@ def twoArraysToOne(x, y, mask, positions):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def advect(xs, ys, vxs, vys, dt):
+def advect(xs, ys, vxs, vys, dt,forcex,mass):
     """
-
+    Use Verlet method to update velocities and positions
     :param xs: x position
     :param ys:
     :param vxs: x velocity
     :param vys:
     :param dt: time step
+    :param forcex: horizontal force to be applied to all particles
+    :param mass: mass of particles
     :return:
     """
+    dec = forcex*dt/mass
     for i in range(len(xs)):
+        vxs[i] += dec
         xs[i] += vxs[i] * dt
         ys[i] += vys[i] * dt
+

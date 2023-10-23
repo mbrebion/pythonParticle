@@ -4,6 +4,8 @@ from glumpy import app, gl, gloo
 from glumpy.graphics.text import FontManager
 from glumpy.graphics.collections import GlyphCollection
 from glumpy.transforms import Position, OrthographicProjection
+
+import domain
 from domain import Domain
 from constants import ComputedConstants, INITSIZEEXTRARATIO
 import warnings
@@ -15,14 +17,14 @@ warnings.filterwarnings('ignore')
 
 class Window:
 
-    def __init__(self, nPart, P, T, L, H, ls, nbCells=1, ratios=None, effectiveTemps=None, resX=1024, resY=1024):
+    def __init__(self, nPart, P, T, L, H, ls, nbCells=1, ratios=None, effectiveTemps=None, resX=1024, resY=1024,periodic = False):
         # simulation
         X = L
         Y = H
         ls = ls
         ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
 
-        self.domain = Domain(nbCells, effectiveTemps=effectiveTemps, ratios=ratios)
+        self.domain = Domain(nbCells, effectiveTemps=effectiveTemps, ratios=ratios, periodic=periodic)
 
         # window
         ComputedConstants.resX = resX
@@ -134,6 +136,7 @@ class Window:
 
         if self.timeStep % 100 == 0 and self.displayPerformance:
             self.updateLabels()
+            print( self.domain.computeTemperature() )
 
 
         #if self.timeStep % 50 == 0:

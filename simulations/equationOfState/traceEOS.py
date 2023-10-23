@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
 font = {'family': 'times',
-        'size': 16}
+        'size': 20}
 
 matplotlib.rc('font', **font)
 
@@ -14,11 +14,11 @@ plt.loglog(etas,zths,"-b", label="EOS Helfand")
 
 nSimple=10
 zsimples = 1/(1-2*etas[:nSimple])-1
-plt.loglog(etas[:nSimple],zsimples,"--r", label="EOS surface exclue", linewidth=2)
+plt.loglog(etas[:nSimple],zsimples,"--r", label="EOS 2", linewidth=2)
 plt.loglog(etas,zs,"+k", label="Simulation",markersize=10,markeredgewidth=2)
 
 
-plt.xlabel("$\eta$")
+plt.xlabel("$\eta_S$")
 plt.ylabel("$Z-1$")
 plt.legend()
 plt.grid()

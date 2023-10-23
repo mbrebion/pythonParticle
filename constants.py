@@ -10,7 +10,7 @@ DEAD = 0
 LEFT = 1
 RIGHT = 2
 
-INITSIZEEXTRARATIO = 1.5
+INITSIZEEXTRARATIO = 2.5
 
 
 class ComputedConstants:
@@ -32,9 +32,12 @@ class ComputedConstants:
     nbCells = None
     decoloringRatio = 0.85
     alphaAveraging = 0.025  # temperature and pressure averaging
+    periodic = False
+    forceX = 0. # horizontal force applied
+
 
     # for wall
-
+    boundaryTemperature = -1  # if positive, temperature imposed at walls
 
     # for opengl
     resX = None
@@ -69,6 +72,7 @@ class ComputedConstants:
         cls.ds = thermo.getDiameter(cls.surface, cls.nbPartTarget, cls.ls)
         cls.vStar = thermo.getMeanSquareVelocity(cls.kbs, cls.ms, cls.initTemp)
         cls.dt = thermo.getDtCollision(cls.vStar, cls.ls)
+        cls.fillRatio = (cls.ds / 2) ** 2 * math.pi * cls.nbPartTarget / cls.surface
 
         cls.time = 0.
         cls.it = 0
@@ -84,6 +88,7 @@ class ComputedConstants:
         print("tau : ", "{:.2e}".format(cls.ls / cls.vStar), " s")
         print("d/l : ", "{:.2e}".format(cls.ds / cls.ls), " ")
         print("dt : ", "{:.5e}".format(cls.dt), " s")
+        print("fill ratio s_parts/S : ", "{:.5e}".format(cls.fillRatio))
         print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
         print()
 
@@ -118,6 +123,7 @@ class ComputedConstants:
 
         cls.vStar = thermo.getMeanSquareVelocity(cls.kbs, cls.ms, cls.initTemp)
         cls.dt = thermo.getDtCollision(cls.vStar, cls.ls)
+        cls.fillRatio = (cls.ds/2)**2 * math.pi * cls.nbPartTarget / cls.surface
 
         cls.time = 0.
         cls.it = 0
@@ -133,6 +139,6 @@ class ComputedConstants:
         print("tau : ", "{:.2e}".format(cls.ls / cls.vStar), " s")
         print("d/l : ", "{:.2e}".format(cls.ds / cls.ls), " ")
         print("dt : ", "{:.5e}".format(cls.dt), " s")
-        print("fill ratio s_parts/S : ", "{:.5e}".format( (cls.ds/2)**2 * math.pi * cls.nbPartTarget / cls.surface ))
+        print("fill ratio s_parts/S : ", "{:.5e}".format( cls.fillRatio))
         print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
         print()

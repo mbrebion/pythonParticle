@@ -8,10 +8,10 @@ import thermo
 
 X = 0.1
 Y = 0.1
-nPart = 4000
+nPart = 12000
 T = 300
 P = 1e5
-eta = 3e-4
+eta = 0.7
 # eta = N pi (ds/2)^2 / (XY)
 ds = math.sqrt(eta * X * Y / nPart / math.pi) * 2
 
@@ -23,7 +23,6 @@ ds = math.sqrt(eta * X * Y / nPart / math.pi) * 2
 ComputedConstants.thermodynamicSetupFixedDiameter(T, X, Y, P, nPart, ds)
 domain = Domain(1)
 domain.setMaxWorkers(1)
-ComputedConstants.dt /= 10
 
 ps = []
 ts = []

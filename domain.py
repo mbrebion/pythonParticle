@@ -1,6 +1,7 @@
 from cell import Cell
 from constants import *
 import tracker
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 from movingWall import MovingWall
 
@@ -11,8 +12,17 @@ class Domain:
     ###################        Initializing        ###############
     ##############################################################
 
-    def __init__(self, nbCells, *, ratios=None, effectiveTemps=None):
+    def __init__(self, nbCells, *, ratios=None, effectiveTemps=None,periodic=False, v_xYVelocityProfile=None):
+        """
+
+        :param nbCells: number of cells used in the simulation
+        :param ratios: if provided, allows to specify different ratios of particles in each cells
+        :param effectiveTemps: if provided, allows to specify different temperatures in each cells
+        :param periodic: if True, periodic boundary conditions are used to link both left and right sides of domain.
+        :param v_xYVelocityProfile: v_x(y) mean velocity profile to be imposed at startup
+        """
         ComputedConstants.nbCells = nbCells
+        ComputedConstants.periodic = periodic
 
         if ratios is None:
             ratios = [1. / ComputedConstants.nbCells for _ in range(nbCells)]
@@ -29,7 +39,7 @@ class Domain:
             left = i * ComputedConstants.length / nbCells
             right = (i + 1) * ComputedConstants.length / nbCells
 
-            c = Cell(nbParts[i], effectiveTemps[i], left, right, startIndex, ComputedConstants.nbPartTarget // nbCells)
+            c = Cell(nbParts[i], effectiveTemps[i], left, right, startIndex, ComputedConstants.nbPartTarget // nbCells,v_xYVelocityProfile=v_xYVelocityProfile)
             startIndex += nbParts[i]
             self.cells.append(c)
 
@@ -41,6 +51,10 @@ class Domain:
 
         for i in range(0, ComputedConstants.nbCells - 1):
             self.cells[i + 1].leftCell = self.cells[i]
+
+        if periodic and ComputedConstants.nbCells > 1:
+            self.cells[-1].rightCell = self.cells[0]
+            self.cells[0].leftCell = self.cells[-1]
 
         # trackers
         self.trackers = []
@@ -71,6 +85,18 @@ class Domain:
     ##############################################################
     ################## Compute thermodynamic      ################
     ##############################################################
+
+    def computeXVelocityBins(self,nbBins):
+        bin = np.array([0.]*nbBins)
+        for c in self.cells:
+            bin += c.computeXVelocityBins(nbBins)
+        return bin / len(self.cells)
+
+    def computeXVelocity(self):
+        vx = 0.
+        for c in self.cells:
+            vx += c.computeXVelocity()
+        return vx / len(self.cells)
 
     def computePressure(self):
         p = 0
@@ -145,6 +171,7 @@ class Domain:
         ComputedConstants.it += 1  # to be moved upper once cells are gathered in broader class
         ComputedConstants.time += ComputedConstants.dt
 
+        self.advectMovingWall()
         futures = []
         for c in self.cells:
             futures.append(self.pool.submit(c.update))
@@ -158,7 +185,9 @@ class Domain:
         for c in self.cells:
             c.applySwap()
 
-        self.advectMovingWall()
+        if ComputedConstants.periodic:
+            for c in self.cells:
+                c.applyPeriodic()
 
         for t in self.trackers:
             t.doMeasures()
@@ -166,6 +195,8 @@ class Domain:
     def _updateSingleT(self):
         ComputedConstants.it += 1  # to be moved upper once cells are gathered in broader class
         ComputedConstants.time += ComputedConstants.dt
+
+        self.advectMovingWall()
 
         for c in self.cells:
             c.update()
@@ -176,7 +207,11 @@ class Domain:
         for c in self.cells:
             c.applySwap()
 
-        self.advectMovingWall()
+        if ComputedConstants.periodic:
+            for c in self.cells:
+                c.applyPeriodic()
+
+
 
         for t in self.trackers:
             t.doMeasures()

@@ -1,7 +1,9 @@
+import math
 import time
-
+import numpy as np
 from constants import ComputedConstants
 from domain import Domain
+from cell import Cell
 
 
 def printList(l, name):
@@ -12,32 +14,56 @@ def printList(l, name):
     print(name, "= np.array(", out)
 
 
-X = 0.02
-Y = 0.01
-ls = 1e-3
-nPart = 16000*4
+X = 0.2
+Y = 0.8
+ls = X/100
+nPart = 16000*8
 T = 300
 P = 1e5
 
 
 def velocity(t):
-    return -2
-
+    return -5
 
 ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
-domain = Domain(4*2)
-domain.setMaxWorkers(1)
-domain.addMovingWall(1000, 4 * X / 5, 40, imposedVelocity=velocity)
+domain = Domain(32)
+domain.setMaxWorkers(2)
+#Cell.collision = False
 
-print("number of cells : ", len(domain.cells))
-it = 0
+xInit = 8 * X / 10
+domain.addMovingWall(1000, xInit, 40, imposedVelocity=velocity)
 
-init = domain.computeKineticEnergyLeftSide() * domain.wall.location()
-while domain.wall.location() > 2 * X / 5:
-    it += 1
+
+def cste(Ec,x):
+    Ns = nPart * np.pi * (ComputedConstants.ds/2)**2
+    S = x*Y
+    return Ec * S * (1 - 2 *Ns/S )
+
+def cstep(Ec,x):
+    Ns = nPart  * np.pi * (ComputedConstants.ds/2)**2
+    S = x*Y+2*(x+Y)*ComputedConstants.ds/2 - 4 * (ComputedConstants.ds/2)**2
+    return Ec * S * (1 - 2 * Ns/S +  0.5 * (Ns/S)**2)
+
+ComputedConstants.dt *= 1
+domain.update()
+
+
+ecl = domain.computeKineticEnergyLeftSide()
+cinit = cste(ecl,domain.wall.location())
+cinitp = cstep(ecl,domain.wall.location())
+
+while domain.wall.location() > 4 * X / 10:
     domain.update()
-    if it % 400 == 0:
+    if (ComputedConstants.it+9995) % 500 == 0:
         ecl = domain.computeKineticEnergyLeftSide()
         ecr = domain.computeKineticEnergyRightSide()
-        print(ComputedConstants.time, domain.wall.location(), ecl, ecr, ecl * domain.wall.location() / init)
+        Cste = cste(ecl,domain.wall.location())
+        Cstep = cstep(ecl, domain.wall.location())
+
+        print(velocity(ComputedConstants.time),domain.wall.location()/X, ecl, Cste/cinit,Cstep/cinitp)
         time.sleep(1)
+
+ecl = domain.computeKineticEnergyLeftSide()
+Cste = cste(ecl,domain.wall.location())
+Cstep = cstep(ecl,domain.wall.location())
+print( domain.wall.location()/X, ecl, Cste/cinit,Cstep/cinitp)
