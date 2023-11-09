@@ -1,4 +1,5 @@
 __pycache__
 .idea
+*.mp4
 venv
 *.txt

@@ -1,13 +1,14 @@
 from random import getrandbits
-
-
 from numba import jit
 import numpy as np
+
+
 ##############################################################
 ############### Left Right periodic boundaries ###############
 ##############################################################
+
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def moveperiodically(xs,rightLimit):
+def movePeriodically(xs, rightLimit):
     """
     Ensure particules remains in the [0,rightlimit] x-space.
     :param xs: array containing w coordinates
@@ -255,7 +256,7 @@ def movingWallInteraction(xs, vxs,vys, wheres, x, v, dt, mp, m):
                 fpr += - (newV - vxs[i]) * mp / dt
 
             vxs[i] = newV
-            #vys[i] *= (-1)**getrandbits(1)
+            vys[i] *= (-1)**getrandbits(1)
 
             # move forward the particle
             xs[i] += vxs[i] * delta
@@ -286,7 +287,7 @@ def staticWallInteractionLeft(xs, vxs,vys, wheres, left,dt, m):
         if xs[i] < left:
             xs[i] = 2 * left - xs[i]
             vxs[i] *= -1
-            #vys[i] *= (-1) ** getrandbits(1)
+            vys[i] *= (-1) ** getrandbits(1)
 
             fleft += abs(vxs[i])
     return fleft * 2 * m / dt
@@ -314,7 +315,7 @@ def staticWallInteractionRight(xs, vxs,vys, wheres, right,dt, m):
         if xs[i] > right:
             xs[i] = 2 * right - xs[i]
             vxs[i] *= -1
-            #vys[i] *= (-1)** getrandbits(1)
+            vys[i] *= (-1)** getrandbits(1)
             fright += abs(vxs[i])
     return fright * 2 * m / dt
 
@@ -349,8 +350,7 @@ def staticWallInterractionUpAndDown(ys,vxs, vys, wheres, width, dt, m,vStar):
 
         elif ys[i] > width:
             ys[i] = 2 * width - ys[i]
-            vys[i] *= -1
-            #bounce = True
+            bounce = True
 
         if bounce:
             vOld = vys[i]
@@ -358,7 +358,7 @@ def staticWallInterractionUpAndDown(ys,vxs, vys, wheres, width, dt, m,vStar):
                 vxs[i] = np.random.normal(0, vStar/sqtwo, 1)[0]
                 vys[i] = - abs(np.random.normal(0, vStar/sqtwo, 1)[0]) * vOld/abs(vOld)
             else:
-                #vxs[i] *= (-1)**getrandbits(1)
+                vxs[i] *= (-1)**getrandbits(1)
                 vys[i] *= -1
 
             fup += abs(vys[i]-vOld)/2  # f = -2 * vy * ms * dn / dt
@@ -400,6 +400,31 @@ def ComputeXVelocityBinsOld(ys,ymax,vxs,wheres,bins):
     return bins
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def ComputeXVelocityBeforeWall(xs,x,measureSpan,vxs,wheres,bins):
+    """
+
+    :param xs: x location of particles
+    :param x: x location of wall
+    :param measureSpan: x span of measures
+    :param vxs: vx velocities
+    :param wheres: mask array
+    :param bins:
+    :return:
+    """
+    ns = [0]*len(bins)
+    for i in range(len(vxs)):
+        if wheres[i] == 0:
+            continue
+        index = int((x-xs[i]) / measureSpan * len(bins))
+        if len(bins) > index >= 0:
+            bins[index] += vxs[i]
+            ns[index] += 1
+
+    for i in range(len(bins)):
+        bins[i] /= max(ns[i],1)
+    return bins
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def ComputeXVelocityBins(ys,ymax,vxs,wheres,bins):
     """
     :param ys:  y positions
@@ -411,7 +436,7 @@ def ComputeXVelocityBins(ys,ymax,vxs,wheres,bins):
     """
     ns = [0]*len(bins)
     for i in range(len(vxs)):
-        if wheres[i] == 0:
+        if wheres[i] >= 0:
             continue
         index = int(ys[i]/ymax * len(bins))
         bins[index]+=vxs[i]
@@ -437,6 +462,7 @@ def ComputeXVelocity(vxs,wheres):
         vx += vxs[i]
         n += 1
     return vx/n
+
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def computeEcs(vxs, vys, wheres, m):
@@ -467,7 +493,7 @@ def computeEcs(vxs, vys, wheres, m):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloring):
+def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloringPolicy,xMax):
     """
     This method update particle positions and velocities taking into account elastic collisions
     It first tries to detect efficiently if collisions occurred,
@@ -483,7 +509,8 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloring
     :param dt: time step
     :param d: particle diameter
     :param histo: histogram of collisions detection according to j-i for storing purpose
-    :param coloring: if True, colors are updated when two particles collide
+    :param coloringPolicy: (str), colors are updated according to policy
+    :param xMax: if >0, collisions are not taken into account when xs[i]>= xMax
     :return: number of collisions
     """
     nbCollide = 0.
@@ -494,13 +521,17 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloring
 
     ln = len(xs)
     nbSearch = len(histo)
+    vxmax = 0
+    if xMax < 0:
+        xMax = 1e9
 
     for i in range(ln - 1):  # last particle can't collide to anyone
-        if wheres[i] == 0:
+        if wheres[i] == 0 or xs[i]>= xMax:
             continue
+        vxmax = max(vxmax,abs(vxs[i]))
 
         for j in range(i + 1, min(len(xs), i + nbSearch)):
-            if wheres[i] * wheres[j] <= 0:  # different side (<0) or one dead particle (==0)
+            if wheres[i] * wheres[j] <= 0 or xs[i] > xMax:  # different side (<0) or one dead particle (==0)
                 continue
 
             coll, t = isCollidingFast(xs[i], ys[i], xs[j], ys[j], vxs[i], vys[i], vxs[j], vys[j], dt, d)
@@ -509,7 +540,7 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloring
                 # record strategy
                 histo[j - i] += 1
 
-                if coloring:
+                if coloringPolicy == "coll":
                     colors[i] = 1
                     colors[j] = 1
 
@@ -536,6 +567,13 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloring
                 ys[i] += t * vys[i]
                 xs[j] += t * vxs[j]
                 ys[j] += t * vys[j]
+
+    if coloringPolicy == "vx":
+        vxmax = max(vxmax,abs(vxs[-1]))
+        for i in range(ln ):  # last particle can't collide to anyone
+            if wheres[i] == 0 or xs[i] >= xMax:
+                continue
+            colors[i] = vxs[i]/vxmax
 
     return nbCollide
 

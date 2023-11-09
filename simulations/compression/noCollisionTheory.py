@@ -3,7 +3,7 @@ import numpy as np
 from random import getrandbits
 from numba import jit
 
-vStar = 426.28 #m/s
+vStar = 100 #m/s
 m=1e-5
 
 @jit(nopython=True, cache=True, fastmath=True)
@@ -23,12 +23,13 @@ def getStateBeforeX0(X,Xf,x0,vx0,vy,V):
     # location of first collision
     i=0
     Xip = X-V * (X + (-1)**side * x0) / (V+vx0)
-    vi=vx0
+    vi = vx0
     while Xip > Xf:
         i+=1
         vi = vx0 + 2 * i * V
         Xip = Xip * (vi-V)/(vi+V)
-    return i,vi,0.5*m*(vy**2 *0+ vi**2), Xip/X
+
+    return i,vi,0.5*m*(vy**2 *0 + vi**2), Xip/X
 
 
 
@@ -44,7 +45,6 @@ def run(V,X,Xf,nPart):
         vy = np.random.normal(0, vStar/2**0.5, 1)[0]
         EcInit += 0.5 * m * (vx0**2 )#+ vy**2)
         i,vi,Ec,xx = getStateBeforeX0(X,Xf,x0,vx0,vy,V)
-        Ec -= 0.5 * m * V ** 2  # macroscopic kinetic energy
         EcFinal += Ec
         varEcFinal += Ec**2
 
@@ -57,8 +57,8 @@ def run(V,X,Xf,nPart):
 ti = time.perf_counter()
 X = (4/5) * 0.1
 Xf = X/2
-nPart = 10000
-V = 42
+nPart = 100000
+V = 2
 r,ur = run(V,X,Xf,nPart)
 print(time.perf_counter() - ti)
 print(str(r)[:8], "+-", str(ur)[:8])

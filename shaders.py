@@ -14,10 +14,10 @@ void main () {
     v_center = position / spaceLength * resolution;
     v_radius = radius;
     v_color = vec3(0.,0.,0.);
-    if (color <0.05){
-        v_color = vec3(0.,0.,0.);
+    if (color <0.0){
+        v_color = vec3(0.,0.,sqrt(-color));
     }else{
-        v_color = vec3(color,0.,0.);
+        v_color = vec3(sqrt(color),0.,0.);
     }
 
 

@@ -19,6 +19,8 @@ class MovingWall:
         self._forceRight = 0.
         self.imposedVelocity = imposedVelocity
 
+
+
     def advect(self):
         # update velocity (enforced or computed)
         if self.imposedVelocity is not None:

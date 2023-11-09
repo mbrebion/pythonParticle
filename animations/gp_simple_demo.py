@@ -1,13 +1,18 @@
 from Window import Window
 from constants import ComputedConstants
+from cell import Cell
 
-window = Window(4000,1E5,600,0.1,0.1, 0.1/25,nbCells=1,periodic=True)
+
+X = 0.177  # X length of simulation in m
+Y = 0.1  # Y length in m
+ls = X/35  # mean free path
+T = 300  # K
+P = 1e5  # Pa
+
+window = Window(2000, P, T, X, Y, ls, nbCells=1, resX=1824, resY=1026)
 
 ComputedConstants.decoloringRatio = 0.7  # speed at which colors return to black after collision (0: instant, 0.5, after two/three frames, 1 never)
-window.nStep = 2 # two time step by frame
-window.displayPerformance = True
-ComputedConstants.dt /= 5
-ComputedConstants.forceX = 9.81 * ComputedConstants.ms*10000*0
-ComputedConstants.boundaryTemperature = 600
+Cell.coloringPolicy = "coll"  # color particles according to vx, blue if <0, red if >0, black if close to 0
+
 window.run()
 

@@ -92,6 +92,16 @@ class Domain:
             bin += c.computeXVelocityBins(nbBins)
         return bin / len(self.cells)
 
+    def ComputeXVelocityBeforeWall(self,nbBins,span):
+        bin = np.array([0.]*nbBins)
+        count = 0
+        for c in self.cells:
+            b = c.ComputeXVelocityBeforeWall(nbBins,span)
+            if bin is not None:
+                count+=1
+                bin += b
+        return bin / count
+
     def computeXVelocity(self):
         vx = 0.
         for c in self.cells:

@@ -8,7 +8,7 @@ from thermo import getMeanSquareVelocity
 
 
 class Cell:
-    colorCollisions = True
+    coloringPolicy = "none" # might be "coll", "vx" or "fixed"
     collision = True
 
     def __init__(self, nbPart, effectiveTemp, left, right, startIndex, nbPartTarget=None,v_xYVelocityProfile=None):
@@ -36,7 +36,8 @@ class Cell:
         if nbPartTarget is None:
             nbPartTarget = self.nbPart
         self.arraySize = int(nbPartTarget * INITSIZEEXTRARATIO)
-        nb = min(int(nbPartTarget**0.5+20), 200)
+        nb = min(int(nbPartTarget**0.5+40), 400)
+        #nb = 750
 
         self.histo = np.zeros(nb, dtype=int)
 
@@ -161,6 +162,18 @@ class Cell:
 
         return numbaAccelerated.ComputeXVelocityBins(self.coords.ys, ComputedConstants.width,self.coords.vxs,self.coords.wheres,bins)
 
+    def ComputeXVelocityBeforeWall(self,nbBins,span):
+        """
+        :param nbBins: number of bins
+        :param span: x span of measures (measures are performed between Xwall-span and Xwall
+        :return: the averaged X velocity in bins
+        """
+
+        bins = np.array([0.]*nbBins)
+        if self.wall is not None:
+            return numbaAccelerated.ComputeXVelocityBeforeWall(self.coords.xs,self.wall.location(),span,self.coords.vxs,self.coords.wheres,bins)
+        return None
+
     def computeKineticEnergy(self):
         """
         :param x: wall location
@@ -233,7 +246,7 @@ class Cell:
 
 
     def applyPeriodic(self):
-        numbaAccelerated.moveperiodically(self.coords.xs,ComputedConstants.length)
+        numbaAccelerated.movePeriodically(self.coords.xs, ComputedConstants.length)
 
     def prepareSwap(self):
         """
@@ -288,48 +301,57 @@ class Cell:
 
         self.computePressure(fup, fdown, fleft, fright)
 
+
+
+
     def collide(self):
         """
         Compute collisions between particles
         nbNeighbour is the number of neighbours par particle i which are checked
         :return: None
         """
-        if Cell.colorCollisions:
+        if Cell.coloringPolicy == "coll":
             self.coords.colors *= ComputedConstants.decoloringRatio
 
+
         x = 1e9
+        xMax = -1
         if self.wall is not None:
             x = self.wall.location()
+            #xMax = x - ComputedConstants.ls/4
+
 
         numbaAccelerated.detectAllCollisions(*self.coords.tpl,
                                              ComputedConstants.dt,
                                              ComputedConstants.ds,
-                                             self.histo, Cell.colorCollisions)
+                                             self.histo, Cell.coloringPolicy, xMax)
 
     def improveCollisionDetectionSpeed(self):
         """
         Improve collision detectionSpeed by estimated the smallest number of neighbor to check for collision
         :return: None
         """
-        ln = len(self.histo)
-        h = np.array(self.histo, dtype=float)
-
-        h /= (np.sum(h))
-        h *= 100
-        k = 1
-        for i in range(1, ln):
-            if h[i] > h[1] / 4:
-                k = i
-
-        k = min(int(ln * 0.8), k)  # safeguard
-        Sk = 0
-        for i in range(k, ln):
-            Sk += h[i]
-        xk = 1 - h[k] / Sk
         try:
+            ln = len(self.histo)
+            h = np.array(self.histo, dtype=float)
+
+            h /= (np.sum(h))
+            h *= 100
+            k = 1
+            for i in range(1, ln):
+                if h[i] > h[1] / 4:
+                    k = i
+
+            k = min(int(ln * 0.8), k)  # safeguard
+            Sk = 0
+            for i in range(k, ln):
+                Sk += h[i]
+            xk = 1 - h[k] / Sk
+
             DeltaMax = max(int(0.5 + k + np.log(0.1 / Sk) / np.log(xk)),12)
-        except:
+        except RuntimeWarning:
             DeltaMax = 100
+
         self.histo = np.zeros(DeltaMax, dtype=int)
 
     def sort(self):

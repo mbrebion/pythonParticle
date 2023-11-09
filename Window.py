@@ -1,11 +1,9 @@
 import time
-import math
 from glumpy import app, gl, gloo
 from glumpy.graphics.text import FontManager
 from glumpy.graphics.collections import GlyphCollection
 from glumpy.transforms import Position, OrthographicProjection
 
-import domain
 from domain import Domain
 from constants import ComputedConstants, INITSIZEEXTRARATIO
 import warnings
@@ -44,7 +42,6 @@ class Window:
         self.displayPerformance = False
 
         self.window.on_resize = self.on_resize
-        self.window.on_draw = self.on_draw
 
         # timing
         self.timeStep = 0
@@ -55,6 +52,34 @@ class Window:
         # wall
         transform = OrthographicProjection(Position())
         self.segments = SegmentCollection(mode="agg", linewidth='local', transform=transform)
+
+        @self.window.event
+        def on_draw( dt):
+            self.t += dt
+            self.timeStep += 1
+            self.window.clear()
+
+            self.program.draw(gl.GL_POINTS)
+
+            self.segments.draw()
+
+            if self.displayPerformance:
+                self.labels.draw()
+
+            alpha = 0.05
+
+            tInit = time.perf_counter()
+
+            for i in range(self.nStep):
+                self.domain.update()
+
+            self.duration = (time.perf_counter() - tInit) / self.nStep * alpha + (1 - alpha) * self.duration
+
+            self.updateProgram()
+
+            if self.timeStep % 100 == 0 and self.displayPerformance:
+                self.updateLabels()
+                print(self.domain.computeTemperature())
 
     def run(self):
         if self.domain.wall is not None:
@@ -111,36 +136,6 @@ class Window:
         ComputedConstants.resY = height
         self.program["resolution"] = width, height
 
-    def on_draw(self, dt):
-        self.t += dt
-        self.timeStep += 1
-        self.window.clear()
-
-        self.program.draw(gl.GL_POINTS)
-
-        self.segments.draw()
-
-        if self.displayPerformance:
-            self.labels.draw()
-
-        alpha = 0.05
-
-        tInit = time.perf_counter()
-
-        for i in range(self.nStep):
-            self.domain.update()
-
-        self.duration = (time.perf_counter() - tInit) / self.nStep * alpha + (1 - alpha) * self.duration
-
-        self.updateProgram()
-
-        if self.timeStep % 100 == 0 and self.displayPerformance:
-            self.updateLabels()
-            print( self.domain.computeTemperature() )
-
-
-        #if self.timeStep % 50 == 0:
-        #    print(ComputedConstants.time, self.domain.wall.location(), self.domain.countLeft(), self.domain.countRight(), self.domain.count())
 
 
 def velocity(t):
