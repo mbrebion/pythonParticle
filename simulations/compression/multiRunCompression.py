@@ -1,9 +1,6 @@
-import math
 import time
-import numpy as np
 from constants import ComputedConstants
 from domain import Domain
-from cell import Cell
 
 
 def printList(l, name):
@@ -17,10 +14,10 @@ def printList(l, name):
 X = 0.4
 Y = 0.4
 ls = X/25
-nPart = 40000
+nPart = 16000
 T = 300
 P = 1e5
-nWarmUp = 10
+nWarmUp = 2
 nbPts = 20
 
 
@@ -52,26 +49,21 @@ def divide(a,n):
 def startRun():
     out = []
     ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
-    domain = Domain(1)
+    domain = Domain(16)
     domain.setMaxWorkers(1)
 
     xInit = 9 * X / 10
-    domain.addMovingWall(1000, xInit, 40, imposedVelocity=velocity)
+    domain.addMovingWall(1000, xInit, vel, imposedVelocity=velocity)
 
     it = 0
     for n in range(nbTime):
-        bins = domain.ComputeXVelocityBeforeWall(nbPts, span)
-        count = 1
-
         while it*ComputedConstants.dt < ts[n]*tAcous:
-
+            it += 1
             domain.update()
-            it+=1
-            if ComputedConstants.it % 30:
-                bins += domain.ComputeXVelocityBeforeWall(nbPts, span)
-                count += 1
 
-        out.append(bins/count)
+        bins = domain.ComputeXVelocityBeforeWall(nbPts, span)
+
+        out.append(bins)
 
     return out
 
@@ -82,9 +74,9 @@ out = startRun()
 count = 1
 for i in range(10000):
     nout = startRun()
-    time.sleep(10)
+    time.sleep(2)
     out = sum(out,nout)
-    count +=1
+    count += 1
     print(i)
     print(divide(out,count))
     print()

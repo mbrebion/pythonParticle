@@ -400,7 +400,7 @@ def ComputeXVelocityBinsOld(ys,ymax,vxs,wheres,bins):
     return bins
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def ComputeXVelocityBeforeWall(xs,x,measureSpan,vxs,wheres,bins):
+def ComputeXVelocityBeforeWall(xs,x,measureSpan,vxs,wheres,bins,counts):
     """
 
     :param xs: x location of particles
@@ -418,11 +418,9 @@ def ComputeXVelocityBeforeWall(xs,x,measureSpan,vxs,wheres,bins):
         index = int((x-xs[i]) / measureSpan * len(bins))
         if len(bins) > index >= 0:
             bins[index] += vxs[i]
-            ns[index] += 1
+            counts[index] += 1
 
-    for i in range(len(bins)):
-        bins[i] /= max(ns[i],1)
-    return bins
+    return bins,counts
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def ComputeXVelocityBins(ys,ymax,vxs,wheres,bins):
@@ -445,6 +443,24 @@ def ComputeXVelocityBins(ys,ymax,vxs,wheres,bins):
     for i in range(len(bins)):
         bins[i] /= max(ns[i],1)
     return bins
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def computeSumVelocityLeftOfWall(xs, vxs, wheres,wallLocation):
+    """
+    :param xs : x locations
+    :param vxs: x velocities
+    :param wheres: mask array
+    :param wallLocation: x wall location
+    :return: sum of velocities left of wall
+    """
+    sm = 0.
+    for i in range(len(vxs)):
+        if wheres[i] == 0 or xs[i] > wallLocation:
+            continue
+        sm += vxs[i]
+    return sm
+
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def ComputeXVelocity(vxs,wheres):
@@ -493,7 +509,91 @@ def computeEcs(vxs, vys, wheres, m):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloringPolicy,xMax):
+def detectCollisionsAtInterface(indices,nindices,xs, ys, vxs, vys, wheres, colors,nxs, nys, nvxs, nvys, nwheres,ncolors, dt, d):
+    """
+        This method update particle positions and velocities taking into account elastic collisions
+        It is focused on collisions occurring between particles from different cells only.
+        Collisions between particles from the same cell are handled before those, in another function
+        It is here assumed that particles' lists are sorted according to y value, even if some collisions between particles
+        within the same cell might change a little the order
+
+        coords variable with n refers to the other cell
+    """
+
+    ra = np.array([0., 0.])
+    rb = np.array([0., 0.])
+    va = np.array([0., 0.])
+    vb = np.array([0., 0.])
+
+    nbCollide = 0
+    i = 0
+    otherFirst = 0
+    maxDeltaY = 0.
+
+    while indices[i] >= 0:
+        # index i refers to particles index in indices (particles close to boundaries)
+
+        ii = indices[i]  # ii refers to particle index
+        nextY = ys[indices[i+1]]
+
+        for j in range(otherFirst,len(nindices)):
+            if nindices[j] < 0:
+                break  # no more particles in other side
+
+            jj = nindices[j]
+
+            maxDeltaY = max(maxDeltaY, (abs(vys[ii]) + abs(nvys[jj]))*dt+d)
+
+            deltay = nys[jj] - ys[ii] # y spacing between ii and jj particle
+
+            if nys[jj] < nextY-maxDeltaY:
+                otherFirst = j
+
+            if abs(deltay) < maxDeltaY:
+
+                # deal with collision:
+                coll, t = isCollidingFast(xs[ii], ys[ii], nxs[jj], nys[jj], vxs[ii], vys[ii], nvxs[jj], nvys[jj], dt, d)
+
+                if coll:
+                    nbCollide += 1.
+
+                    # restore locations before collision
+
+                    xs[ii] -= t * vxs[ii]
+                    ys[ii] -= t * vys[ii]
+                    nxs[jj] -= t * nvxs[jj]
+                    nys[jj] -= t * nvys[jj]
+
+                    # update velocities
+                    ra[0], ra[1] = xs[ii], ys[ii]
+                    rb[0], rb[1] = nxs[jj], nys[jj]
+                    va[0], va[1] = vxs[ii], vys[ii]
+                    vb[0], vb[1] = nvxs[jj], nvys[jj]
+                    vfa, vfb = bounce(ra, rb, va, vb)
+                    vxs[ii], vys[ii] = vfa[0], vfa[1]
+                    nvxs[jj], nvys[jj] = vfb[0], vfb[1]
+
+                    # re-shift particles
+                    xs[ii] += t * vxs[ii]
+                    ys[ii] += t * vys[ii]
+                    nxs[jj] += t * nvxs[jj]
+                    nys[jj] += t * nvys[jj]
+
+            else:
+                if deltay > maxDeltaY:
+                    break
+
+        i = i+1
+
+    indices *= 0
+    nindices *= 0
+    indices += -1
+    nindices += -1
+
+    return nbCollide
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def detectAllCollisions(xs, ys, vxs, vys, wheres, colors,indicesLeft,indicesRight, dt, d, histo, coloringPolicy,xMax,left,right):
     """
     This method update particle positions and velocities taking into account elastic collisions
     It first tries to detect efficiently if collisions occurred,
@@ -506,11 +606,16 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloring
     :param vys:
     :param wheres:
     :param colors:
+    :param indicesLeft: arrays where indices of particles which are at left side of cell are stored
+    :param indicesRight: arrays where indices of particles which are at right side of cell are stored
     :param dt: time step
     :param d: particle diameter
     :param histo: histogram of collisions detection according to j-i for storing purpose
     :param coloringPolicy: (str), colors are updated according to policy
     :param xMax: if >0, collisions are not taken into account when xs[i]>= xMax
+    :param left : left coord of cell
+    :param right : right coord of cell
+
     :return: number of collisions
     """
     nbCollide = 0.
@@ -522,13 +627,25 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, dt, d, histo, coloring
     ln = len(xs)
     nbSearch = len(histo)
     vxmax = 0
+    leftIndex = 0
+    rightIndex = 0
+
     if xMax < 0:
         xMax = 1e9
 
     for i in range(ln - 1):  # last particle can't collide to anyone
-        if wheres[i] == 0 or xs[i]>= xMax:
+        if wheres[i] == 0 or xs[i] >= xMax:
             continue
         vxmax = max(vxmax,abs(vxs[i]))
+
+        if xs[i] < left+abs(vxs[i]*dt)+d:
+            indicesLeft[leftIndex] = i
+            leftIndex += 1
+
+        if xs[i] > right-abs(vxs[i]*dt)-d:
+            indicesRight[rightIndex] = i
+            rightIndex += 1
+
 
         for j in range(i + 1, min(len(xs), i + nbSearch)):
             if wheres[i] * wheres[j] <= 0 or xs[i] > xMax:  # different side (<0) or one dead particle (==0)
@@ -676,7 +793,7 @@ def countAliveLeft(xs, wheres, x):
             countLoc += 1
         if wheres[i] < 0:
             countWhere += 1
-    if countLoc != countWhere:
+    if countLoc != countWhere and False:
         print("problem ", countLoc, countWhere)
     return countWhere
 
@@ -689,7 +806,7 @@ def countAliveRight(xs, wheres, x):
             countLoc += 1
         if wheres[i] > 0:
             countWhere += 1
-    if countLoc != countWhere:
+    if countLoc != countWhere and False:
         print("problem ", countLoc, countWhere)
     return countWhere
 

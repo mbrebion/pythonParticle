@@ -86,6 +86,12 @@ class Domain:
     ################## Compute thermodynamic      ################
     ##############################################################
 
+    def computeAverageVelocityLeftOfWall(self):
+        av = 0
+        for c in self.cells:
+            av += c.computeSumVelocityLeftOfWall(self.wall.location())
+        return av/self.countLeft()
+
     def computeXVelocityBins(self,nbBins):
         bin = np.array([0.]*nbBins)
         for c in self.cells:
@@ -93,14 +99,19 @@ class Domain:
         return bin / len(self.cells)
 
     def ComputeXVelocityBeforeWall(self,nbBins,span):
-        bin = np.array([0.]*nbBins)
-        count = 0
+
+        sBins = np.array([0.]*nbBins)
+        sCounts = np.array([0.] * nbBins)
         for c in self.cells:
-            b = c.ComputeXVelocityBeforeWall(nbBins,span)
-            if bin is not None:
-                count+=1
-                bin += b
-        return bin / count
+            bins,counts = c.ComputeXVelocityBeforeWall(nbBins,span,self.wall.location())
+            sBins += bins
+            sCounts += counts
+
+        for i in range(len(sCounts)):
+            if sCounts[i] == 0:
+                sCounts[i] = 1
+
+        return sBins/sCounts
 
     def computeXVelocity(self):
         vx = 0.
@@ -182,12 +193,18 @@ class Domain:
         ComputedConstants.time += ComputedConstants.dt
 
         self.advectMovingWall()
+
         futures = []
         for c in self.cells:
             futures.append(self.pool.submit(c.update))
         wait(futures, return_when=ALL_COMPLETED)
-        futures = []
 
+        futures = []
+        for c in self.cells:
+            futures.append(self.pool.submit(c.interfaceCollide))
+        wait(futures, return_when=ALL_COMPLETED)
+
+        futures = []
         for c in self.cells:
             futures.append(self.pool.submit(c.prepareSwap))
         wait(futures, return_when=ALL_COMPLETED)
@@ -210,6 +227,9 @@ class Domain:
 
         for c in self.cells:
             c.update()
+
+        for c in self.cells:
+            c.interfaceCollide()
 
         for c in self.cells:
             c.prepareSwap()

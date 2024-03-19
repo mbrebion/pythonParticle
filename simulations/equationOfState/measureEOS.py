@@ -8,10 +8,10 @@ import thermo
 
 X = 0.1
 Y = 0.1
-nPart = 12000
+nPart = 32000
 T = 300
 P = 1e5
-eta = 0.7
+eta = 0.1
 # eta = N pi (ds/2)^2 / (XY)
 ds = math.sqrt(eta * X * Y / nPart / math.pi) * 2
 
@@ -21,7 +21,7 @@ ds = math.sqrt(eta * X * Y / nPart / math.pi) * 2
 # ( P S ) / (N k T) = 1 / (1-eta)^2  <- better model
 
 ComputedConstants.thermodynamicSetupFixedDiameter(T, X, Y, P, nPart, ds)
-domain = Domain(1)
+domain = Domain(16)
 domain.setMaxWorkers(1)
 
 ps = []
@@ -41,7 +41,7 @@ while it < 4e5:
     if it % 10000 == 0:
 
         p = np.average(ps)
-        up = np.std(ps) / len(ps) # / np.sqrt(len(ps)) # correlated measures
+        up = np.std(ps) / len(ps)**(3/4) # / np.sqrt(len(ps)) # correlated measures
         t = np.average(ts)
         z = p * X*Y / (nPart * ComputedConstants.kbs*t)
         print(it, ComputedConstants.time, p,up,t,z)

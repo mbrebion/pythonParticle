@@ -20,9 +20,9 @@ def addPlot(name,display):
     Ecs = []
     cstes = []
     for l in f:
-        x,Ec,cste,cstep = l.split()
-        xs.append(float(x))
-        cstes.append((float(cste)))
+        data = l.split()
+        xs.append(float(data[0]))
+        cstes.append((float(data[2])))
 
     xs = np.array(xs)/xs[0]
     cstes = np.array(cstes)

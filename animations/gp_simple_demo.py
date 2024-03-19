@@ -9,7 +9,7 @@ ls = X/35  # mean free path
 T = 300  # K
 P = 1e5  # Pa
 
-window = Window(2000, P, T, X, Y, ls, nbCells=1, resX=1824, resY=1026)
+window = Window(8000, P, T, X, Y, ls, nbCells=1, resX=1824, resY=1026)
 
 ComputedConstants.decoloringRatio = 0.7  # speed at which colors return to black after collision (0: instant, 0.5, after two/three frames, 1 never)
 Cell.coloringPolicy = "coll"  # color particles according to vx, blue if <0, red if >0, black if close to 0

@@ -37,7 +37,7 @@ class Cell:
             nbPartTarget = self.nbPart
         self.arraySize = int(nbPartTarget * INITSIZEEXTRARATIO)
         nb = min(int(nbPartTarget**0.5+40), 400)
-        #nb = 750
+        nb = 1000
 
         self.histo = np.zeros(nb, dtype=int)
 
@@ -147,6 +147,10 @@ class Cell:
     ##############################################################
     ################## Compute thermodynamic      ################
     ##############################################################
+
+    def computeSumVelocityLeftOfWall(self,wallLocation):
+        return numbaAccelerated.computeSumVelocityLeftOfWall(self.coords.xs, self.coords.vxs, self.coords.wheres,wallLocation)
+
     def computeXVelocity(self):
         """
         :return: the averaged X velocity of the cell
@@ -162,17 +166,17 @@ class Cell:
 
         return numbaAccelerated.ComputeXVelocityBins(self.coords.ys, ComputedConstants.width,self.coords.vxs,self.coords.wheres,bins)
 
-    def ComputeXVelocityBeforeWall(self,nbBins,span):
+    def ComputeXVelocityBeforeWall(self,nbBins,span,wallLoc):
         """
         :param nbBins: number of bins
         :param span: x span of measures (measures are performed between Xwall-span and Xwall
+        :param wallLoc : location of wall
         :return: the averaged X velocity in bins
         """
 
         bins = np.array([0.]*nbBins)
-        if self.wall is not None:
-            return numbaAccelerated.ComputeXVelocityBeforeWall(self.coords.xs,self.wall.location(),span,self.coords.vxs,self.coords.wheres,bins)
-        return None
+        counts = np.array([0.] * nbBins)
+        return numbaAccelerated.ComputeXVelocityBeforeWall(self.coords.xs,wallLoc,span,self.coords.vxs,self.coords.wheres,bins,counts)
 
     def computeKineticEnergy(self):
         """
@@ -303,6 +307,12 @@ class Cell:
 
 
 
+    def interfaceCollide(self):
+        return
+        if self.leftCell != None:
+            nb = numbaAccelerated.detectCollisionsAtInterface(self.coords.indicesLeftOfCell,self.leftCell.coords.indicesRightOfCell, *self.coords.tpl,*self.leftCell.coords.tpl,
+                                             ComputedConstants.dt,
+                                             ComputedConstants.ds)
 
     def collide(self):
         """
@@ -321,10 +331,10 @@ class Cell:
             #xMax = x - ComputedConstants.ls/4
 
 
-        numbaAccelerated.detectAllCollisions(*self.coords.tpl,
+        nb =numbaAccelerated.detectAllCollisions(*self.coords.tplExtended,
                                              ComputedConstants.dt,
                                              ComputedConstants.ds,
-                                             self.histo, Cell.coloringPolicy, xMax)
+                                             self.histo, Cell.coloringPolicy, xMax,self.left,self.right)
 
     def improveCollisionDetectionSpeed(self):
         """
