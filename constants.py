@@ -5,6 +5,7 @@ MASS = 4.83e-26  # kg ; mean mass of air particle
 Kb = 1.38e-23  # USI ; Boltzmann constant
 DIAMETER = 0.37e-9  # m ; effective diameter of average air particle
 Z = 1  # m ; S*Z = V
+drOverLs = 0.005
 
 DEAD = 0
 LEFT = 1
@@ -34,6 +35,7 @@ class ComputedConstants:
     alphaAveraging = 0.025  # temperature and pressure averaging
     periodic = False
     forceX = 0. # horizontal force applied
+    ls = 0.
 
 
     # for wall
@@ -71,7 +73,7 @@ class ComputedConstants:
         cls.ms = thermo.getMSimu(MASS, Kb, cls.kbs)
         cls.ds = thermo.getDiameter(cls.surface, cls.nbPartTarget, cls.ls)
         cls.vStar = thermo.getMeanSquareVelocity(cls.kbs, cls.ms, cls.initTemp)
-        cls.dt = thermo.getDtCollision(cls.vStar, cls.ls)
+        cls.dt = thermo.getDtCollision(cls.vStar, cls.ls,drOverLs)
         cls.fillRatio = (cls.ds / 2) ** 2 * math.pi * cls.nbPartTarget / cls.surface
 
         cls.time = 0.
@@ -122,7 +124,7 @@ class ComputedConstants:
         cls.ms = thermo.getMSimu(MASS, Kb, cls.kbs)
 
         cls.vStar = thermo.getMeanSquareVelocity(cls.kbs, cls.ms, cls.initTemp)
-        cls.dt = thermo.getDtCollision(cls.vStar, cls.ls)
+        cls.dt = thermo.getDtCollision(cls.vStar, cls.ls,drOverLs)
         cls.fillRatio = (cls.ds/2)**2 * math.pi * cls.nbPartTarget / cls.surface
 
         cls.time = 0.

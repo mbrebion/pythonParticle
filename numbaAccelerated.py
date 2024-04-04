@@ -16,7 +16,7 @@ def movePeriodically(xs, rightLimit):
     :return: None
     """
     for i in range(len(xs)):
-        if xs[i] > rightLimit or xs[i]<0:
+        if xs[i] > rightLimit or xs[i] < 0:
             xs[i] = xs[i] % rightLimit
 
 
@@ -213,22 +213,23 @@ def sortCell(xs, ys, vxs, vys, wheres, colors):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def movingWallInteraction(xs, vxs,vys, wheres, x, v, dt, mp, m):
+def movingWallInteraction(xs, vxs, vys, wheres, x, v, dt, mp, m):
     """
-        update coordinates and velocities of particles interacting left wall (is exists)
+    update coordinates and velocities of particles interacting left wall (if exists)
+    The exact time (if wall velocity is constant) is first computed ; then the particle is correctly bounced back
 
-        :param xs: array containing x coordinates of particles
-        :param vxs: array containing x velocities of particles
-        :param vys: array containing x velocities of particles
-        :param wheres: mask array
-        :param x : x coordinate of wall
-        :param v : velocity coordinate of wall
-        :param dt : time step
-        :param mp : mass of particle
-        :param m : mass of wall
+    :param xs: array containing x coordinates of particles
+    :param vxs: array containing x velocities of particles
+    :param vys: array containing x velocities of particles
+    :param wheres: mask array
+    :param x : x coordinate of wall
+    :param v : velocity coordinate of wall
+    :param dt : time step
+    :param mp : mass of particle
+    :param m : mass of wall
 
-        :return: Force applied to wall at both sides
-        """
+    :return: Force applied to wall at both sides
+    """
     fpl = 0.
     fpr = 0.
     for i in range(len(xs)):
@@ -239,7 +240,7 @@ def movingWallInteraction(xs, vxs,vys, wheres, x, v, dt, mp, m):
             # particle crossed the wall, in either direction
             delta = -(xs[i] - x) / (v - vxs[i])
 
-            if delta < 0 : # already treated collision
+            if delta < 0:  # already treated collision
                 continue
 
             # move backward the particle
@@ -256,7 +257,7 @@ def movingWallInteraction(xs, vxs,vys, wheres, x, v, dt, mp, m):
                 fpr += - (newV - vxs[i]) * mp / dt
 
             vxs[i] = newV
-            vys[i] *= (-1)**getrandbits(1)
+            vys[i] *= (-1) ** getrandbits(1)
 
             # move forward the particle
             xs[i] += vxs[i] * delta
@@ -265,7 +266,7 @@ def movingWallInteraction(xs, vxs,vys, wheres, x, v, dt, mp, m):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInteractionLeft(xs, vxs,vys, wheres, left,dt, m):
+def staticWallInteractionLeft(xs, vxs, vys, wheres, left, dt, m):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
@@ -292,8 +293,9 @@ def staticWallInteractionLeft(xs, vxs,vys, wheres, left,dt, m):
             fleft += abs(vxs[i])
     return fleft * 2 * m / dt
 
+
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInteractionRight(xs, vxs,vys, wheres, right,dt, m):
+def staticWallInteractionRight(xs, vxs, vys, wheres, right, dt, m):
     """
         update coordinates and velocities of particles interacting left wall (is exists)
 
@@ -315,13 +317,13 @@ def staticWallInteractionRight(xs, vxs,vys, wheres, right,dt, m):
         if xs[i] > right:
             xs[i] = 2 * right - xs[i]
             vxs[i] *= -1
-            vys[i] *= (-1)** getrandbits(1)
+            vys[i] *= (-1) ** getrandbits(1)
             fright += abs(vxs[i])
     return fright * 2 * m / dt
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInterractionUpAndDown(ys,vxs, vys, wheres, width, dt, m,vStar):
+def staticWallInterractionUpAndDown(ys, vxs, vys, wheres, width, dt, m, vStar):
     """
     update coordinates and velocities of particles interacting with solid walls (which are horizontal)
     Compute the forces applied to both walls
@@ -337,7 +339,7 @@ def staticWallInterractionUpAndDown(ys,vxs, vys, wheres, width, dt, m,vStar):
     :return: fup,fdown, the two forces (computed positively)
     """
     fup, fdown = 0., 0.
-    sqtwo = (4/3)**0.5
+    sqtwo = (4 / 3) ** 0.5
 
     for i in range(len(ys)):
         if wheres[i] == 0:
@@ -355,13 +357,13 @@ def staticWallInterractionUpAndDown(ys,vxs, vys, wheres, width, dt, m,vStar):
         if bounce:
             vOld = vys[i]
             if vStar > 0:
-                vxs[i] = np.random.normal(0, vStar/sqtwo, 1)[0]
-                vys[i] = - abs(np.random.normal(0, vStar/sqtwo, 1)[0]) * vOld/abs(vOld)
+                vxs[i] = np.random.normal(0, vStar / sqtwo, 1)[0]
+                vys[i] = - abs(np.random.normal(0, vStar / sqtwo, 1)[0]) * vOld / abs(vOld)
             else:
-                vxs[i] *= (-1)**getrandbits(1)
+                vxs[i] *= (-1) ** getrandbits(1)
                 vys[i] *= -1
 
-            fup += abs(vys[i]-vOld)/2  # f = -2 * vy * ms * dn / dt
+            fup += abs(vys[i] - vOld) / 2  # f = -2 * vy * ms * dn / dt
 
     return fdown * 2 * m / dt, fup * 2 * m / dt
 
@@ -372,7 +374,7 @@ def staticWallInterractionUpAndDown(ys,vxs, vys, wheres, width, dt, m,vStar):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def ComputeXVelocityBinsOld(ys,ymax,vxs,wheres,bins):
+def ComputeXVelocityBinsOld(ys, ymax, vxs, wheres, bins):
     """
     :param ys:  y positions
     :param ymax:  max y value
@@ -381,26 +383,27 @@ def ComputeXVelocityBinsOld(ys,ymax,vxs,wheres,bins):
     :param bins: list dedicated to store the means
     :return: modified bins
     """
-    ns = [0.]*len(bins)
-    delta = ymax/(len(bins)-1)
+    ns = [0.] * len(bins)
+    delta = ymax / (len(bins) - 1)
     for i in range(len(vxs)):
         if wheres[i] == 0:
             continue
-        k = int(ys[i]/delta)
+        k = int(ys[i] / delta)
         alphakp = (ys[i] - k * delta) / delta
         alphak = 1 - alphakp
 
         bins[k] += vxs[i] * alphak
         ns[k] += alphak
-        bins[k+1] += vxs[i] * alphakp
-        ns[k+1] += alphakp
+        bins[k + 1] += vxs[i] * alphakp
+        ns[k + 1] += alphakp
 
     for i in range(len(bins)):
-        bins[i] /= max(ns[i],1)
+        bins[i] /= max(ns[i], 1)
     return bins
 
+
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def ComputeXVelocityBeforeWall(xs,x,measureSpan,vxs,wheres,bins,counts):
+def ComputeXVelocityBeforeWall(xs, x, measureSpan, vxs, wheres, bins, counts):
     """
 
     :param xs: x location of particles
@@ -411,19 +414,20 @@ def ComputeXVelocityBeforeWall(xs,x,measureSpan,vxs,wheres,bins,counts):
     :param bins:
     :return:
     """
-    ns = [0]*len(bins)
+    ns = [0] * len(bins)
     for i in range(len(vxs)):
         if wheres[i] == 0:
             continue
-        index = int((x-xs[i]) / measureSpan * len(bins))
+        index = int((x - xs[i]) / measureSpan * len(bins))
         if len(bins) > index >= 0:
             bins[index] += vxs[i]
             counts[index] += 1
 
-    return bins,counts
+    return bins, counts
+
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def ComputeXVelocityBins(ys,ymax,vxs,wheres,bins):
+def ComputeXVelocityBins(ys, ymax, vxs, wheres, bins):
     """
     :param ys:  y positions
     :param ymax:  max y value
@@ -432,21 +436,21 @@ def ComputeXVelocityBins(ys,ymax,vxs,wheres,bins):
     :param bins: list dedicated to store the means
     :return: modified bins
     """
-    ns = [0]*len(bins)
+    ns = [0] * len(bins)
     for i in range(len(vxs)):
         if wheres[i] >= 0:
             continue
-        index = int(ys[i]/ymax * len(bins))
-        bins[index]+=vxs[i]
-        ns[index] +=1
+        index = int(ys[i] / ymax * len(bins))
+        bins[index] += vxs[i]
+        ns[index] += 1
 
     for i in range(len(bins)):
-        bins[i] /= max(ns[i],1)
+        bins[i] /= max(ns[i], 1)
     return bins
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def computeSumVelocityLeftOfWall(xs, vxs, wheres,wallLocation):
+def computeSumVelocityLeftOfWall(xs, vxs, wheres, wallLocation):
     """
     :param xs : x locations
     :param vxs: x velocities
@@ -463,7 +467,7 @@ def computeSumVelocityLeftOfWall(xs, vxs, wheres,wallLocation):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def ComputeXVelocity(vxs,wheres):
+def ComputeXVelocity(vxs, wheres):
     """
 
     :param vxs: x velocities
@@ -477,7 +481,7 @@ def ComputeXVelocity(vxs,wheres):
             continue
         vx += vxs[i]
         n += 1
-    return vx/n
+    return vx / n
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
@@ -509,13 +513,14 @@ def computeEcs(vxs, vys, wheres, m):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def detectCollisionsAtInterface(indices,nindices,xs, ys, vxs, vys, wheres, colors,nxs, nys, nvxs, nvys, nwheres,ncolors, dt, d):
+def detectCollisionsAtInterface(indices, nindices, xs, ys, vxs, vys, wheres, colors, nxs, nys, nvxs, nvys, nwheres,
+                                ncolors, dt, d):
     """
         This method update particle positions and velocities taking into account elastic collisions
         It is focused on collisions occurring between particles from different cells only.
         Collisions between particles from the same cell are handled before those, in another function
-        It is here assumed that particles' lists are sorted according to y value, even if some collisions between particles
-        within the same cell might change a little the order
+        It is here assumed that particles' lists are sorted according to y value,
+        even if some collisions between particles within the same cell might change a little the order
 
         coords variable with n refers to the other cell
     """
@@ -531,22 +536,24 @@ def detectCollisionsAtInterface(indices,nindices,xs, ys, vxs, vys, wheres, color
     maxDeltaY = 0.
 
     while indices[i] >= 0:
-        # index i refers to particles index in indices (particles close to boundaries)
+        # index i refers to particles index in indices (particles closed to boundaries)
 
-        ii = indices[i]  # ii refers to particle index
-        nextY = ys[indices[i+1]]
+        ii = indices[i]  # ii refers to real particle index
+        nextY = ys[indices[i + 1]]
 
-        for j in range(otherFirst,len(nindices)):
+        for j in range(otherFirst, len(nindices)):
+
             if nindices[j] < 0:
                 break  # no more particles in other side
-
             jj = nindices[j]
+            if wheres[ii] * nwheres[jj] <= 0:  # different side (<0) or one dead particle (==0)
+                continue
 
-            maxDeltaY = max(maxDeltaY, (abs(vys[ii]) + abs(nvys[jj]))*dt+d)
+            maxDeltaY = max(maxDeltaY, (abs(vys[ii]) + abs(nvys[jj])) * dt + d  )
 
-            deltay = nys[jj] - ys[ii] # y spacing between ii and jj particle
+            deltay = nys[jj] - ys[ii]  # y spacing between ii and jj particle
 
-            if nys[jj] < nextY-maxDeltaY:
+            if nys[jj] < nextY - maxDeltaY:
                 otherFirst = j
 
             if abs(deltay) < maxDeltaY:
@@ -583,7 +590,7 @@ def detectCollisionsAtInterface(indices,nindices,xs, ys, vxs, vys, wheres, color
                 if deltay > maxDeltaY:
                     break
 
-        i = i+1
+        i = i + 1
 
     indices *= 0
     nindices *= 0
@@ -592,8 +599,10 @@ def detectCollisionsAtInterface(indices,nindices,xs, ys, vxs, vys, wheres, color
 
     return nbCollide
 
+
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def detectAllCollisions(xs, ys, vxs, vys, wheres, colors,indicesLeft,indicesRight, dt, d, histo, coloringPolicy,xMax,left,right):
+def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, indicesLeft, indicesRight, dt, d, histo, coloringPolicy,
+                        left, right):
     """
     This method update particle positions and velocities taking into account elastic collisions
     It first tries to detect efficiently if collisions occurred,
@@ -611,8 +620,7 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors,indicesLeft,indicesRigh
     :param dt: time step
     :param d: particle diameter
     :param histo: histogram of collisions detection according to j-i for storing purpose
-    :param coloringPolicy: (str), colors are updated according to policy
-    :param xMax: if >0, collisions are not taken into account when xs[i]>= xMax
+    :param coloringPolicy: (str), colors updated according to policy
     :param left : left coord of cell
     :param right : right coord of cell
 
@@ -630,25 +638,22 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors,indicesLeft,indicesRigh
     leftIndex = 0
     rightIndex = 0
 
-    if xMax < 0:
-        xMax = 1e9
-
     for i in range(ln - 1):  # last particle can't collide to anyone
-        if wheres[i] == 0 or xs[i] >= xMax:
+        if wheres[i] == 0:
             continue
-        vxmax = max(vxmax,abs(vxs[i]))
 
-        if xs[i] < left+abs(vxs[i]*dt)+d:
+        vxmax = max(vxmax, abs(vxs[i]))
+
+        if xs[i] < left + abs(vxs[i] * dt) + d:   # better use a less restrictive criteria
             indicesLeft[leftIndex] = i
             leftIndex += 1
 
-        if xs[i] > right-abs(vxs[i]*dt)-d:
+        if xs[i] > right - abs(vxs[i] * dt) - d:   # same comment
             indicesRight[rightIndex] = i
             rightIndex += 1
 
-
         for j in range(i + 1, min(len(xs), i + nbSearch)):
-            if wheres[i] * wheres[j] <= 0 or xs[i] > xMax:  # different side (<0) or one dead particle (==0)
+            if wheres[i] * wheres[j] <= 0:  # different side (<0) or one dead particle (==0)
                 continue
 
             coll, t = isCollidingFast(xs[i], ys[i], xs[j], ys[j], vxs[i], vys[i], vxs[j], vys[j], dt, d)
@@ -686,11 +691,11 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors,indicesLeft,indicesRigh
                 ys[j] += t * vys[j]
 
     if coloringPolicy == "vx":
-        vxmax = max(vxmax,abs(vxs[-1]))
-        for i in range(ln ):  # last particle can't collide to anyone
-            if wheres[i] == 0 or xs[i] >= xMax:
+        vxmax = max(vxmax, abs(vxs[-1]))
+        for i in range(ln):
+            if wheres[i] == 0:
                 continue
-            colors[i] = vxs[i]/vxmax
+            colors[i] = vxs[i] / vxmax
 
     return nbCollide
 
@@ -749,10 +754,10 @@ def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
         if t < 0:
             return False, 0.
         elif t > dt:
-            if (x1-x2)**2 + (y1-y2)**2 < d**2 and t < 10*dt:
+            if (x1 - x2) ** 2 + (y1 - y2) ** 2 < d ** 2 :                      # TODO : is this correct ?
                 # in this case, collision has really occurred, but before this time step.
                 # it must be treated.
-                return True, t#min(t,4*dt)
+                return True, t  # min(t,4*dt)
             return False, 0.
         else:
             return True, t
@@ -846,7 +851,32 @@ def twoArraysToOne(x, y, mask, positions):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def advect(xs, ys, vxs, vys, dt,forcex,mass):
+def twoArraysToTwo(x, y, mask, colors, sign, xForDisplay, yForDisplay):
+    """
+    remove dead particles for display arrays
+    :param x: 1D numpy array (n)
+    :param y: 1D numpy array (n)
+    :param mask: 1D numpy array (n) containing int
+    :param colors: 1D numpy array (n) colors (float < or >0)
+    :param sign: only particle with colors of sign sign(float) are outputed
+    :param xForDisplay: array in which x coordinates are stored for screen display purpose
+    :param yForDisplay: same for y axis
+
+    :return: None
+    """
+    j = 0
+    while xForDisplay[j] > -1000:
+        j += 1
+
+    for i in range(len(x)):
+        if mask[i] and colors[i] * sign > 0:
+            xForDisplay[j] = x[i]
+            yForDisplay[j] = y[i]
+            j += 1
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def advect(xs, ys, vxs, vys, dt, forcex, mass):
     """
     Use Verlet method to update velocities and positions
     :param xs: x position
@@ -858,9 +888,8 @@ def advect(xs, ys, vxs, vys, dt,forcex,mass):
     :param mass: mass of particles
     :return:
     """
-    dec = forcex*dt/mass
+    dec = forcex * dt / mass
     for i in range(len(xs)):
         vxs[i] += dec
         xs[i] += vxs[i] * dt
         ys[i] += vys[i] * dt
-

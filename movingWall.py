@@ -19,6 +19,12 @@ class MovingWall:
         self._forceRight = 0.
         self.imposedVelocity = imposedVelocity
 
+    def setFree(self):
+        self.savedImposedVelocity = self.imposedVelocity
+        self.imposedVelocity = None
+
+    def unSetFree(self):
+        self.imposedVelocity = self.savedImposedVelocity
 
 
     def advect(self):

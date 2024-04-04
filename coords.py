@@ -11,8 +11,8 @@ class Coords:
         self.vxs = np.empty(size, dtype=float)
         self.vys = np.empty(size, dtype=float)
         self.wheres = np.ones(size, dtype=np.int32) * DEAD
-        self.colors = np.zeros(size, dtype=float)
-        self.indicesLeftOfCell = np.zeros(size//4, dtype=np.int32)-1
+        self.colors = np.ones(size, dtype=float)
+        self.indicesLeftOfCell = np.zeros(size // 4, dtype=np.int32)-1
         self.indicesRightOfCell = np.zeros(size // 4, dtype=np.int32)-1
 
         self.updateTuple()

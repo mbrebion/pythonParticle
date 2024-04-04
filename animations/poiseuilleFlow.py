@@ -8,7 +8,7 @@ ls = Y/25  # mean free path
 T = 300  # K
 P = 1e5  # Pa
 
-window = Window(2000, P, T, X, Y, ls, nbCells=4, periodic=True, resX=1824, resY=1026)
+window = Window(4000, P, T, X, Y, ls, nbCells=4, periodic=True, resX=1824, resY=1026)
 ComputedConstants.forceX = 6  # N
 ComputedConstants.boundaryTemperature = T
 

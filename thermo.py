@@ -1,5 +1,14 @@
 # set of thermo functions used to compute simulation values from real values
 
+def getNCollisionEstimate(Nc,ls,Hc,drOverLs):
+    """
+
+    :param Nc: number of particle in the cell
+    :param ls: mean free path
+    :param Hc: height of the cell
+    :return: the estimated (overestimated) number of particles which may collide to one during a single time step
+    """
+    return max(int(drOverLs*2 * Nc * ls / Hc *1.2),50)
 
 def getKbSimu(pressure, volume, temperature, NSimu):
     """
@@ -62,14 +71,15 @@ def getMeanSquareVelocity(KbS, ms, temperature):
     return (2 * KbS / ms * temperature) ** 0.5
 
 
-def getDtCollision(meanSquareVelocity, l):
+def getDtCollision(meanSquareVelocity, ls, drOverLs):
     """
     compute optimal time step in order to capture particle collisions
     :param meanSquareVelocity: mean quare velocity v*
-    :param d: mean free path
+    :param ls: mean free path
+    :param drOverLs: ratio between expected displacement during one time step and mean free path
     :return: optimal time step in order not to miss particle/particle collision
     """
-    return l / meanSquareVelocity * 0.05
+    return ls / meanSquareVelocity * drOverLs
 
 
 def getDtNoCollision(meanSquareVelocity, L):

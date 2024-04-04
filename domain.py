@@ -12,7 +12,7 @@ class Domain:
     ###################        Initializing        ###############
     ##############################################################
 
-    def __init__(self, nbCells, *, ratios=None, effectiveTemps=None,periodic=False, v_xYVelocityProfile=None):
+    def __init__(self, nbCells, *, ratios=None, effectiveTemps=None, periodic=False, v_xYVelocityProfile=None):
         """
 
         :param nbCells: number of cells used in the simulation
@@ -39,7 +39,8 @@ class Domain:
             left = i * ComputedConstants.length / nbCells
             right = (i + 1) * ComputedConstants.length / nbCells
 
-            c = Cell(nbParts[i], effectiveTemps[i], left, right, startIndex, ComputedConstants.nbPartTarget // nbCells,v_xYVelocityProfile=v_xYVelocityProfile)
+            c = Cell(nbParts[i], effectiveTemps[i], left, right, startIndex, ComputedConstants.nbPartTarget // nbCells,
+                     v_xYVelocityProfile=v_xYVelocityProfile)
             startIndex += nbParts[i]
             self.cells.append(c)
 
@@ -58,6 +59,11 @@ class Domain:
 
         # trackers
         self.trackers = []
+
+        # nbcollisions
+        self.insideAverage = 0
+        self.interfaceAverage = 0
+        self.itCount = 0
 
         # single/multi thread default
         self.update = self._updateSingleT
@@ -90,20 +96,20 @@ class Domain:
         av = 0
         for c in self.cells:
             av += c.computeSumVelocityLeftOfWall(self.wall.location())
-        return av/self.countLeft()
+        return av / self.countLeft()
 
-    def computeXVelocityBins(self,nbBins):
-        bin = np.array([0.]*nbBins)
+    def computeXVelocityBins(self, nbBins):
+        bin = np.array([0.] * nbBins)
         for c in self.cells:
             bin += c.computeXVelocityBins(nbBins)
         return bin / len(self.cells)
 
-    def ComputeXVelocityBeforeWall(self,nbBins,span):
+    def ComputeXVelocityBeforeWall(self, nbBins, span):
 
-        sBins = np.array([0.]*nbBins)
+        sBins = np.array([0.] * nbBins)
         sCounts = np.array([0.] * nbBins)
         for c in self.cells:
-            bins,counts = c.ComputeXVelocityBeforeWall(nbBins,span,self.wall.location())
+            bins, counts = c.ComputeXVelocityBeforeWall(nbBins, span, self.wall.location())
             sBins += bins
             sCounts += counts
 
@@ -111,7 +117,7 @@ class Domain:
             if sCounts[i] == 0:
                 sCounts[i] = 1
 
-        return sBins/sCounts
+        return sBins / sCounts
 
     def computeXVelocity(self):
         vx = 0.
@@ -122,7 +128,7 @@ class Domain:
     def computePressure(self):
         p = 0
         for c in self.cells:
-            p += c.instantPressure / len(self.cells)  # average of pression over multiple cells
+            p += c.instantPressure / len(self.cells)  # average of pressure over multiple cells
 
         return p
 
@@ -180,6 +186,21 @@ class Domain:
         for c in self.cells:
             c.checkCorrectSide()
 
+    def resetCount(self):
+        self.itCount = 0
+
+    def countCollisions(self):
+        a = 1 / (2 + self.itCount)
+        self.itCount += 1
+        inside = 0
+        interface = 0
+        for c in self.cells:
+            inside += c.lastNbCollide
+            interface += c.lastNbCollideInterface
+
+        self.insideAverage = self.insideAverage * (1 - a) + a * inside
+        self.interfaceAverage = self.interfaceAverage * (1 - a) + a * interface
+
     ##############################################################
     ##################         Update      #######################
     ##############################################################
@@ -219,6 +240,8 @@ class Domain:
         for t in self.trackers:
             t.doMeasures()
 
+        self.countCollisions()
+
     def _updateSingleT(self):
         ComputedConstants.it += 1  # to be moved upper once cells are gathered in broader class
         ComputedConstants.time += ComputedConstants.dt
@@ -241,7 +264,7 @@ class Domain:
             for c in self.cells:
                 c.applyPeriodic()
 
-
-
         for t in self.trackers:
             t.doMeasures()
+
+        self.countCollisions()
