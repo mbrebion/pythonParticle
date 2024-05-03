@@ -73,7 +73,7 @@ class ComputedConstants:
         cls.ms = thermo.getMSimu(MASS, Kb, cls.kbs)
         cls.ds = thermo.getDiameter(cls.surface, cls.nbPartTarget, cls.ls)
         cls.vStar = thermo.getMeanSquareVelocity(cls.kbs, cls.ms, cls.initTemp)
-        cls.dt = thermo.getDtCollision(cls.vStar, cls.ls,drOverLs)
+        cls.dt = thermo.getDtCollision(cls.vStar, cls.ls, drOverLs)
         cls.fillRatio = (cls.ds / 2) ** 2 * math.pi * cls.nbPartTarget / cls.surface
 
         cls.time = 0.

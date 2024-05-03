@@ -7,7 +7,7 @@ import numpy as np
 
 X = 0.1
 Y = 0.1
-nPart = 32000
+nPart = 64000
 T = 318
 P = 1e5
 ls = Y/50  # mean free path
@@ -23,8 +23,8 @@ def vxyVelocityProfile(y):
     return 4*vmax/YY**2 * y * (YY-y)
 
 
-domain = Domain(12, periodic=True,v_xYVelocityProfile=vxyVelocityProfile)
-domain.setMaxWorkers(2)
+domain = Domain(16, periodic=True,v_xYVelocityProfile=vxyVelocityProfile)
+domain.setMaxWorkers(3)
 
 
 print("start recording")
@@ -52,8 +52,6 @@ def computeBlock(sizeBlock=10000):
 
         if ComputedConstants.it % onevery == 0:  # wait onevery it to ensure independence of snapshots
             bins.append(np.array(domain.computeXVelocityBins(nbBin)))
-        if ComputedConstants.it % 2000 == 0:
-            time.sleep(4.5)
 
     stds = np.array([0.]*nbBin)
     averages = np.array([0.]*nbBin)
@@ -76,7 +74,7 @@ def isConverged(vs1,vs2,accuracy):
     return diff<accuracy
 
 
-sizeBlock = 5e4
+sizeBlock = 5e3
 std, vs = computeBlock(sizeBlock) # warm up
 
 

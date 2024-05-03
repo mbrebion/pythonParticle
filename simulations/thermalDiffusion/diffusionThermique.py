@@ -16,13 +16,13 @@ X = 1
 Y = 0.1
 ls = 5e-3
 
-nPart = 50000
+nPart = 64000
 T = 300
 P = 1e5
 
 ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
 ComputedConstants.dt *= 1
-nbDomains = 10
+nbDomains = 16
 tHigh = 320.
 tLow = 2 * T - tHigh
 alpha = tLow / tHigh
@@ -37,15 +37,16 @@ for j in range(nbDomains // 2, nbDomains):
     ratios[j] = rd / 5
 
 domain = Domain(nbDomains, effectiveTemps=effectiveTemps, ratios=ratios)
+domain.setMaxWorkers(3)
 
 instants = []
 temps = []
 
 it = 0
-itMax = 1e3
+itMax = 1e5
 instants.append(ComputedConstants.time)
 temps.append(domain.getAveragedTemperatures())
-ComputedConstants.alphaAveraging = 1
+ComputedConstants.alphaAveraging = 0.1
 while it < itMax:
     it += 1
     domain.update()
@@ -57,8 +58,6 @@ while it < itMax:
         instants.append(ComputedConstants.time)
         temps.append(domain.getAveragedTemperatures())
 
-    if it % 10000 == 0:
-        time.sleep(5)
 
 printList(instants, "ts")
 printList(temps, "temps")

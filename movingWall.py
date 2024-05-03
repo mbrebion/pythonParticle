@@ -31,7 +31,7 @@ class MovingWall:
         # update velocity (enforced or computed)
         if self.imposedVelocity is not None:
             t = ComputedConstants.time
-            self._v = self.imposedVelocity(t)
+            self._v = self.imposedVelocity(t,self._x)
         else:
             self._v += (self._forceLeft + self._forceRight) * ComputedConstants.dt / self._mass
         self._forceLeft = 0

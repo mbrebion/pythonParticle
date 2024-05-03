@@ -129,7 +129,7 @@ def indicesToSwapLeft(xs, xmin, wheres, indices):
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def goodIndexToInsertTo(y, ys, wheres, ymax):
     """
-
+    This functions tries to find the best index for incoming particle the existing particle list according to its y coordinate
     :param y: y of target particle
     :param ys: ys of already present particles
     :param wheres: masks
@@ -137,7 +137,7 @@ def goodIndexToInsertTo(y, ys, wheres, ymax):
     :return: the next best index to insert particle at
     """
 
-    index = int(y / ymax * len(ys))  # guess for best index
+    index = int(y / ymax * len(ys))  # guess for best index according to uniform distribution
 
     while index < len(ys) and ys[index] < y:
         index += 1
@@ -360,7 +360,7 @@ def staticWallInterractionUpAndDown(ys, vxs, vys, wheres, width, dt, m, vStar):
                 vxs[i] = np.random.normal(0, vStar / sqtwo, 1)[0]
                 vys[i] = - abs(np.random.normal(0, vStar / sqtwo, 1)[0]) * vOld / abs(vOld)
             else:
-                vxs[i] *= (-1) ** getrandbits(1)
+                #vxs[i] *= (-1) ** getrandbits(1)
                 vys[i] *= -1
 
             fup += abs(vys[i] - vOld) / 2  # f = -2 * vy * ms * dn / dt

@@ -414,3 +414,8 @@ class Cell:
                 self.improveCollisionDetectionSpeed()
 
         self.updateConstants()
+
+
+#TODO : what if particle collide with rigid and moving wall in the same time step ?
+#TODO : does it happen in practice ?
+#TODO : without moving wall, it should work whatever the order
