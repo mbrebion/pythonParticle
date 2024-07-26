@@ -5,13 +5,17 @@ MASS = 4.83e-26  # kg ; mean mass of air particle
 Kb = 1.38e-23  # USI ; Boltzmann constant
 DIAMETER = 0.37e-9  # m ; effective diameter of average air particle
 Z = 1  # m ; S*Z = V
-drOverLs = 0.005
+
+
+drOverLs = 0.02  # if low, accurate simulations (less probability for multiple collisions during one timestep)
+INITSIZEEXTRARATIO = 1.35 # because of dynamic reshaping of cells, large value is not required anymore
+
 
 DEAD = 0
 LEFT = 1
 RIGHT = 2
 
-INITSIZEEXTRARATIO = 2.5
+
 
 
 class ComputedConstants:
@@ -86,7 +90,7 @@ class ComputedConstants:
         print("v* = ", "{:.5e}".format(cls.vStar), "m/s")
         print("dOM/L = v*dt/L = ", "{:.2e}".format(cls.vStar * cls.dt / cls.length))
         print("dOM/d = v*dt/d = ", "{:.2e}".format(cls.vStar * cls.dt / cls.ds))
-        print("l : ", "{:.5e}".format(cls.ls), " m")
+        print("ls : ", "{:.5e}".format(cls.ls), " m")
         print("tau : ", "{:.2e}".format(cls.ls / cls.vStar), " s")
         print("d/l : ", "{:.2e}".format(cls.ds / cls.ls), " ")
         print("dt : ", "{:.5e}".format(cls.dt), " s")

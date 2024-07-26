@@ -14,7 +14,7 @@ def printList(l, name):
 X = 0.4
 Y = 0.4
 ls = X/25
-nPart = 16000
+nPart = 32000
 T = 300
 P = 1e5
 nWarmUp = 2
@@ -29,7 +29,7 @@ ts = [0.05,0.1,0.2,0.4,0.7,1,1.3,1.7,2,2.5,3,3.5,4]
 tis = [ts[0]/2*tAcous] + [(ts[i] +ts[i-1])/2*tAcous for i in range(1,len(ts))]
 nbTime = len(ts)
 
-def velocity(t):
+def velocity(t,x):
     if t <= ComputedConstants.dt * nWarmUp:
         return 0.
     return -vel
@@ -50,9 +50,9 @@ def startRun():
     out = []
     ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
     domain = Domain(16)
-    domain.setMaxWorkers(1)
+    domain.setMaxWorkers(4)
 
-    xInit = 9 * X / 10
+    xInit = 8 * X / 10
     domain.addMovingWall(1000, xInit, vel, imposedVelocity=velocity)
 
     it = 0

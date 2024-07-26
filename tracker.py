@@ -1,5 +1,4 @@
 import numbaAccelerated
-import cell
 from constants import *
 import numpy as np
 
@@ -13,67 +12,63 @@ class Tracker:
         :param pid: id of the particle to track
         """
         self.id = pid
-
         self.domain = domain
-        self.currentIndex = None
+
+        self.currentIndex = 0
         self.currentCell = None
+        self.currentCellIndex = 0
+        self.lastCollisionTime = -1
+
 
         self.meanFreePath = meanFreePath  # if true, measurement of mean free path and time is performed
 
         self._updateCurrentIndex()
-        x, y = self.getPosition()
-        pos = np.array([x, y])
-        self.previousPosAtImpacts = [pos]  # positions of particle id right after impact
-        self._invalidateCurrentIndex()
+        self.lastNormV = (np.sum(self.getVelocity() ** 2)) ** 0.5
         self.ds = []  # distances since last impact
         self.ts = []  # times of impacts
-        self.lastPos = pos  # last position
-        self.distance = 0  # distance since last impact
-
-    def _invalidateCurrentIndex(self):
-        self.currentIndex = None
 
     def _updateCurrentIndex(self):
-        if self.currentIndex is None:
-            index, idCell = -1, -1
-            _cell = None
-            while index == -1:
-                idCell += 1
-                _cell = self.domain.cells[idCell]
-                index = numbaAccelerated.retieveIndex(self.id, _cell.coords.wheres)
-            self.currentCell = _cell
-            self.currentIndex = index
+        index, idCell = -1, self.currentCellIndex - 1
+        _cell = None
+        while index == -1:
+            idCell += 1
+            _cell = self.domain.cells[idCell % len(self.domain.cells)]
+            index = numbaAccelerated.retrieveIndexs(self.id, _cell.coords.wheres, self.currentIndex)
 
-    def getPosition(self):
-        return self.currentCell.getPositionsBuffer()[self.currentIndex]
+        self.currentCell = _cell
+        self.currentCellIndex = idCell % len(self.domain.cells)
+        self.currentIndex = index
 
-    def _hasCollidedRecently(self):
-        return self.currentCell.coords.colors[self.currentIndex] > ComputedConstants.decoloringRatio
+    def getVelocity(self):
+        return np.array(
+            [self.currentCell.coords.vxs[self.currentIndex], self.currentCell.coords.vys[self.currentIndex]])
 
     def _measureMeanFreePathAndTime(self):
-        x, y = self.getPosition()
-        pos = np.array([x, y])
+        accurateTime =  self.currentCell.coords.lastColls[self.currentIndex]
+        newV = (np.sum(self.getVelocity() ** 2)) ** 0.5
+        if newV != self.lastNormV:
+            if self.lastCollisionTime < 0:
+                self.lastCollisionTime = accurateTime
+                self.lastNormV = (np.sum(self.getVelocity() ** 2)) ** 0.5
+            else:
+                deltaT = (accurateTime - self.lastCollisionTime)
+                #print(ComputedConstants.time, self.currentCell.coords.lastColls[self.currentIndex])
 
-        self.distance += numbaAccelerated.norm(pos - self.lastPos)
-        self.lastPos = pos
+                self.distance = deltaT * self.lastNormV
+                self.ds.append(self.distance)
+                self.ts.append(deltaT)
 
-        if self._hasCollidedRecently():
-            self.previousPosAtImpacts.append(pos)
-            self.ds.append(self.distance)
-            self.ts.append(ComputedConstants.time)
-            self.distance = 0
+                self.lastCollisionTime = accurateTime
+                self.lastNormV = newV
 
     def doMeasures(self):
         """
         perform all measurement required for particle id
         :return: None
         """
-        self._updateCurrentIndex()
-
         if self.meanFreePath:
+            self._updateCurrentIndex()
             self._measureMeanFreePathAndTime()
-
-        self._invalidateCurrentIndex()
 
     def getMeanFreePathresults(self):
         """
@@ -86,8 +81,8 @@ class Tracker:
         ul = np.std(np.array(self.ds)) / len(self.ds) ** 0.5
 
         # mean free time and uncertainty
-        dts = np.array(self.ts)[1:] - np.array(self.ts)[0:len(self.ts) - 1]
-        tl = np.average(np.array(dts))
-        utl = np.std(np.array(dts) / len(dts) ** 0.5)
+
+        tl = np.average(np.array(self.ts))
+        utl = np.std(np.array(self.ts) / len(self.ts) ** 0.5)
 
         return l, ul, tl, utl

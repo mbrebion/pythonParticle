@@ -9,20 +9,20 @@ from domain import Domain
 ### inputs ###
 ##############
 
-X = 0.4
-Y = 0.4
+X = 0.2
+Y = 0.1
 ls = X / 25
-nPart = 1024000
+nPart = 256000
 T = 300
 P = 1e5
-nbDomain = 2
-vstarov = 28
-
+nbDomain = 32
+vstarov = 14
+maxWorker = 2
 wallInit = 8 * X / 10
 
 ##############
-nbAverage = 2  # number of identical runs launched to output average and uncertainties
-idleRatio = .2  # extra % time spent in sleep to reduce CPU heating
+nbAverage = 4  # number of identical runs launched to output average and uncertainties
+idleRatio = .25  # extra % time spent in sleep to reduce CPU heating
 ###############
 ### outputs ###
 ###############
@@ -56,7 +56,7 @@ def getOutPutsAsList(d, dd):
 
 
 def outputFileName(dd):
-    return str(int(dd["nPart"] / 1000)) + "_" + str(dd["nbDomain"]) + "_" + str(dd["vstarov"])+ "_" + str(int(dd["X"]/dd["ls"]+0.1)) + "_PLA_SHORT.txt"
+    return (str(int(dd["nPart"] / 1000)) + "_" + str(dd["nbDomain"]) + "_" + str(dd["vstarov"])+ "_" + str(int(dd["X"]/dd["ls"]+0.1))+"_" + str(dd["X"]) +"_" + str(dd["Y"]) + "_PRA.txt")
 
 ##################
 ### run params ###
@@ -70,7 +70,7 @@ def outputCriterion(d, dd):
     :return: True if data is to be output ; False else
     """
     nbItTotalEstim = int( (dd["wallInit"]/2 * dd["vstarov"] / ComputedConstants.vStar) / ComputedConstants.dt + 0.1 )
-    return ComputedConstants.it * 1000 % nbItTotalEstim == 0
+    return ComputedConstants.it * 200 % nbItTotalEstim == 0
 
 
 def runCriterion(d, dd):
@@ -92,7 +92,7 @@ def initRun(d, dd):
     """
 
     def velocity(t,x):
-        if t <= ComputedConstants.dt * 20:
+        if t <= ComputedConstants.dt * 100:
             return 0.
 
         return -ComputedConstants.vStar / dd["vstarov"]
@@ -146,7 +146,7 @@ def launchAll():
 def launchRun(dd):
     ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
     domain = Domain(nbDomain)
-    domain.setMaxWorkers(2)
+    domain.setMaxWorkers(maxWorker)
     initRun(domain, dd)
 
     outputSet = []

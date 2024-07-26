@@ -272,7 +272,6 @@ def plotData(show,textLoc=None):
     plt.figure(figsize=(16, 8))
     plt.subplots_adjust(left=0.09, right=0.98, top=0.98, bottom=0.11)
     plt.grid()
-
     for i in range(0,n):
         if show[i] == 0:
             continue
@@ -280,32 +279,34 @@ def plotData(show,textLoc=None):
         p = profile486[i]
         pold = profile243[i]
 
-        #p = profile356[i]
-        #pold = profile178[i]
+        p = profile356[i]
+        pold = profile178[i]
 
         pnew = p*2 - pold
         dec = np.abs(pnew-pold)/4 + 0.025
         t = ti[i]
         xWall = X*0.9 - vel * t
-        xs = [ xWall -(k+0.5)*ls for k in range(nbPts)]
+        X0 = X*0.9
+        xs = np.array([ xWall -(k+0.5)*ls for k in range(nbPts)])
 
-        plt.fill_between(xs, abs(p)-dec, abs(p)+dec, alpha=1, facecolor=((count)/nbShow, 0, 0), label = "$t_{"+str(i+1)+"}/\\tau_a = $" + str(t/tAcous)[:5])
+        plt.fill_between(xs/X0, abs(p)-dec, abs(p)+dec, alpha=1, facecolor=((count)/nbShow, 0, 0), label = "$t_{"+str(i+1)+"}/\\tau_a = $" + str(t/tAcous)[:5])
+
         if textLoc == None:
-            plt.text(xWall-(414+25)*t, 6, "$t_"+str(i+1)+"$",color = ((count)/nbShow, 0, 0))
+            plt.text(1-(414+25)*t/0.345 , 6, "$t_"+str(i+1)+"$",color = ((count)/nbShow, 0, 0))
         else:
+            plt.text(textLoc[count-1][0]/X0, textLoc[count-1][1], "$t_{" + str(i + 1) + "}$",color = ((count)/nbShow, 0, 0))
 
-            plt.text(textLoc[count-1][0], textLoc[count-1][1], "$t_{" + str(i + 1) + "}$",color = ((count)/nbShow, 0, 0))
-        plt.plot(xs,abs(p),"o",color = ((count)/nbShow, 0, 0))
-    #plt.plot([0.,xWall],[0.,vel],"--b",label="modèle")
+        plt.plot(xs/X0,abs(p),"o",color = ((count)/nbShow, 0, 0))
+    plt.plot([0.,xWall/X0],[0.,vel],"--b",label="modèle")
 
-    plt.xlabel("$x$ [m]")
-    plt.ylabel("|v| [m/s]")
-    plt.xlim(0,0.36)
+    plt.xlabel("$\\xi$")
+    plt.ylabel("$|\\bar{v}|$ [m/s]")
+    plt.xlim(0,1)
     plt.legend(loc="upper left")
     plt.show()
 
 
 
-plotData([1,1,1,1,1,1,0,0,0,0,0,0,0])
+#plotData([1,1,1,1,1,1,0,0,0,0,0,0,0])
 #plotData([0,0,0,0,0,1,1,1,1,0,0,0,0])
-#plotData([0,0,0,0,0,0,1,0,1,0,1,0,1],textLoc=[[0.125,19],[0.20,11.6],[0.14,16],[0.16,15.2]])
+plotData([0,0,0,0,0,0,1,0,1,0,1,0,1],textLoc=[[0.125,19],[0.20,11.6],[0.14,16],[0.18,14.8]])

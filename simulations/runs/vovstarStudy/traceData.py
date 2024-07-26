@@ -7,9 +7,7 @@ font = {'family': 'times',
 
 matplotlib.rc('font', **font)
 
-files = ["128_1_70.txt", "128_1_50.txt", "128_1_35.txt", "128_1_25.txt", "128_1_18.txt",
-         "256_4_14.txt", "256_4_10.txt", "256_4_7.txt", "256_4_5.txt"]
-
+files = ["256_32_5_25_0.2_0.1_PRA.txt","256_32_7_25_0.2_0.1_PRA.txt","256_32_10_25_0.2_0.1_PRA.txt","256_32_20_25_0.2_0.1_PRA.txt","256_32_50_25_0.2_0.1_PRA.txt","256_32_100_25_0.2_0.1_PRA.txt"]
 
 def addPlot(name,axesPlot):
     f = open(name, "r")
@@ -44,7 +42,7 @@ def addPlot(name,axesPlot):
 fig, main_ax = plt.subplots(figsize=(16, 8));
 main_ax.set_box_aspect(0.5)
 plt.subplots_adjust(left=0.09, right=0.98, top=0.98, bottom=0.11)
-plt.ylim(0.999, 1.05)
+plt.ylim(0.999, 1.07)
 plt.xlim(0.49, 1.15)
 
 inset_ax = main_ax.inset_axes(

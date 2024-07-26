@@ -9,21 +9,20 @@ from domain import Domain
 ### inputs ###
 ##############
 
-X = 0.4
-Y = 0.4
-ls = X / 50
+X = 0.2
+Y = 0.1
+ls = X / 25
 nPart = 512000
 T = 300
 P = 1e5
-nbDomain = 2
-vstarovFirst = 14
-vstarovSecond = 14
-
+nbDomain = 32
+vstarov = 20
+maxWorker = 2
 wallInit = 8 * X / 10
 
 ##############
-nbAverage = 3  # number of identical runs launched to output average and uncertainties
-idleRatio = .1  # extra % time spent in sleep to reduce CPU heating
+nbAverage = 4  # number of identical runs launched to output average and uncertainties
+idleRatio = .25  # extra % time spent in sleep to reduce CPU heating
 ###############
 ### outputs ###
 ###############
@@ -35,7 +34,7 @@ def getOutPutsNames(dd):
     :return: list of strings
     """
 
-    return ["$X(t)/X(0)$", "$r$", "$|v/v^*| = 1/"+str(dd["vstarovFirst"])+" \\to 1/"+str(dd["vstarovSecond"])+" $", "blue"]
+    return ["$X(t)/X(0)$", "$r$", "$|v/v^*| = 1/"+str(dd["vstarov"])+" $", "blue"]
 
 def getOutPutsAsList(d, dd):
     """
@@ -50,13 +49,14 @@ def getOutPutsAsList(d, dd):
     ecTotal = d.computeKineticEnergyLeftSide()
     ecMacro = d.computeAverageVelocityLeftOfWall()**2 * 0.5 * d.countLeft() * ComputedConstants.ms
     c = ecTotal * S * (1 - 2 * Ns / S)
+
     output = [x,c/d.initialC,ecTotal,ecMacro,ComputedConstants.time]
     print(output)
     return output
 
 
 def outputFileName(dd):
-    return str(int(dd["nPart"] / 1000)) + "_" + str(dd["nbDomain"]) + "_" + str(dd["vstarovFirst"])+"_" + str(dd["vstarovSecond"])+ "_" + str(int(dd["X"]/dd["ls"]+0.1)) + "_PLA.txt"
+    return (str(int(dd["nPart"] / 1000)) + "_" + str(dd["nbDomain"]) + "_" + str(dd["vstarov"])+ "_" + str(int(dd["X"]/dd["ls"]+0.1))+"_" + str(dd["X"]) +"_" + str(dd["Y"]) + "_PRA.txt")
 
 ##################
 ### run params ###
@@ -69,8 +69,8 @@ def outputCriterion(d, dd):
     :param d: data dict
     :return: True if data is to be output ; False else
     """
-    nbItTotalEstim = int( (dd["wallInit"]/2 * dd["vstarovFirst"] / ComputedConstants.vStar) / ComputedConstants.dt + 0.1 )
-    return ComputedConstants.it * 500 % nbItTotalEstim == 0
+    nbItTotalEstim = int( (dd["wallInit"]/2 * dd["vstarov"] / ComputedConstants.vStar) / ComputedConstants.dt + 0.1 )
+    return ComputedConstants.it * 200 % nbItTotalEstim == 0
 
 
 def runCriterion(d, dd):
@@ -92,20 +92,17 @@ def initRun(d, dd):
     """
 
     def velocity(t,x):
-        if t <= ComputedConstants.dt * 20:
+        if t <= ComputedConstants.dt * 100:
             return 0.
 
-        if x > dd["wallInit"]*3/4:
-            return -ComputedConstants.vStar / dd["vstarovFirst"]
-        else:
-            return -ComputedConstants.vStar / dd["vstarovSecond"]
+        return -ComputedConstants.vStar / dd["vstarov"]
 
 
     xInit = 8 * dd["X"] / 10
     d.addMovingWall(1000, xInit, 40, imposedVelocity=velocity)
     d.update()
     Ns = d.countLeft() * np.pi * (ComputedConstants.ds / 2) ** 2
-    S = dd["wallInit"]* dd["Y"]
+    S = dd["wallInit"] * dd["Y"]
     d.initialC = d.computeKineticEnergyLeftSide() * S * (1 - 2 * Ns / S)
 
 
@@ -113,7 +110,7 @@ def initRun(d, dd):
 ### do the magic ###
 ####################
 
-mdd = {"X": X, "Y": Y, "ls": ls, "nPart": nPart, "T": T, "P": P, "nbDomain": nbDomain, "vstarovFirst": vstarovFirst,"vstarovSecond": vstarovSecond, "wallInit": wallInit}
+mdd = {"X": X, "Y": Y, "ls": ls, "nPart": nPart, "T": T, "P": P, "nbDomain": nbDomain, "vstarov": vstarov, "wallInit": wallInit}
 
 
 def launchAll():
@@ -149,7 +146,7 @@ def launchAll():
 def launchRun(dd):
     ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
     domain = Domain(nbDomain)
-    domain.setMaxWorkers(2)
+    domain.setMaxWorkers(maxWorker)
     initRun(domain, dd)
 
     outputSet = []

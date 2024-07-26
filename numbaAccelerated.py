@@ -25,7 +25,8 @@ def movePeriodically(xs, rightLimit):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def fromAtoB(ia, ib, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb):
+
+def fromAtoB(ia, ib, xsa, ysa, vxsa, vysa, wheresa, lastColla, xsb, ysb, vxsb, vysb, wheresb, lastCollb):
     # swap
 
     xsb[ib] = xsa[ia]
@@ -33,16 +34,18 @@ def fromAtoB(ia, ib, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vys
     vxsb[ib] = vxsa[ia]
     vysb[ib] = vysa[ia]
     wheresb[ib] = wheresa[ia]
-    colorsb[ib] = colorsa[ia]
+    lastCollb[ib] = lastColla[ia]
 
     # reset
     vxsa[ia] = 0.
     vysa[ia] = 0.
+    #ysa is not reset as still used for sorting purposes.
+    # velocities are set to 0 so that y and x stay constants
     wheresa[ia] = 0
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def moveToSwap(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb, xLim, kindOfLim):
+def moveToSwap(xsa, ysa, vxsa, vysa, wheresa, lastColla, xsb, ysb, vxsb, vysb, wheresb, lastCollb, xLim, kindOfLim):
     """
     Move particles from a coordinates to b coordinates (swap if needed) and return the amount of particle moved
     :param xLim: x left or right limit
@@ -50,22 +53,16 @@ def moveToSwap(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, whe
     :return: the amount of particle moved
     """
     count = 0
-    if kindOfLim:
-        for i in range(len(xsa)):
-            if xsa[i] > xLim and wheresa[i] != 0:
-                fromAtoB(i, count, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
-                count += 1
-    else:
-        for i in range(len(xsa)):
-            if xsa[i] < xLim and wheresa[i] != 0:
-                fromAtoB(i, count, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
-                count += 1
+    for i in range(len(xsa)):
+        if wheresa[i] != 0 and (xsa[i] > xLim) == kindOfLim:
+            fromAtoB(i, count, xsa, ysa, vxsa, vysa, wheresa, lastColla, xsb, ysb, vxsb, vysb, wheresb, lastCollb)
+            count += 1
 
     return count
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def moveSwapToNeighbor(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb, amount, ymax):
+def moveSwapToNeighbor(xsa, ysa, vxsa, vysa, wheresa, lastColla, xsb, ysb, vxsb, vysb, wheresb, lastCollb, amount, ymax):
     """
     Move particles from swap a to other cell b
     :param amount: number of particle to be moved
@@ -74,13 +71,13 @@ def moveSwapToNeighbor(xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, v
     """
     for i in range(amount):
         bestIndex = goodIndexToInsertTo(ysa[i], ysb, wheresb, ymax)
-        fromAtoB(i, bestIndex, xsa, ysa, vxsa, vysa, wheresa, colorsa, xsb, ysb, vxsb, vysb, wheresb, colorsb)
+        fromAtoB(i, bestIndex, xsa, ysa, vxsa, vysa, wheresa, lastColla, xsb, ysb, vxsb, vysb, wheresb, lastCollb)
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def indicesToSwapRight(xs, xmax, wheres, indices):
     """
-    retrieve the indices of particle which must be swapped to right and store therm to indices
+    retrieve the indices of particle which must be swapped to right and store them to indices
     :param xs: x coordinates
     :param xmax: end of cell coordinate
     :param wheres: mask
@@ -126,10 +123,11 @@ def indicesToSwapLeft(xs, xmin, wheres, indices):
 ##############################################################
 
 
+
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def goodIndexToInsertTo(y, ys, wheres, ymax):
     """
-    This functions tries to find the best index for incoming particle the existing particle list according to its y coordinate
+    This functions tries to find the best index for incoming particle in the existing particle list according to its y coordinate
     :param y: y of target particle
     :param ys: ys of already present particles
     :param wheres: masks
@@ -137,27 +135,32 @@ def goodIndexToInsertTo(y, ys, wheres, ymax):
     :return: the next best index to insert particle at
     """
 
-    index = int(y / ymax * len(ys))  # guess for best index according to uniform distribution
+    # first guess for best index according to uniform distribution
+    index = int(y / ymax * len(ys))
 
+    # then find index in arrays with closest y ; should be fast if guess is correct
+    while index >0 and ys[index] > y:
+        index -= 1
     while index < len(ys) and ys[index] < y:
         index += 1
 
+    # then find the closest empty index
     while index < len(ys) and wheres[index] != 0:
         index += 1
 
+    # if no index found : search backward
     if index >= len(ys):
         # end of the list, search dead particle backward
         index = len(ys) - 1
         while index >= 0 and wheres[index] != 0:
             index -= 1
-
     return index
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
 def roll1(i, ar1, ar2, ar3, ar4, ar5, ar6):
     """
-    set values formerly at index i-1 to index i for 5 arrays
+    set values formerly at index i-1 to index i for 6 arrays
     :param i:  final position for values from index i-1
     :param ar1: first array modified
     :param ar2:
@@ -176,9 +179,9 @@ def roll1(i, ar1, ar2, ar3, ar4, ar5, ar6):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def sortCell(xs, ys, vxs, vys, wheres, colors):
+def sortCell(xs, ys, vxs, vys, wheres, lastColls):
     """
-    Sort 5 arrays according to ys (second array provided) with insertion algorithm (fastest for quite already sorted arrays)
+    Sort 6 arrays according to ys (second array provided) with insertion algorithm (fastest for quite already sorted arrays)
     :param xs: first array
     :param ys: second array which content is used for sorting
     :param vxs:
@@ -190,19 +193,19 @@ def sortCell(xs, ys, vxs, vys, wheres, colors):
 
     for i in range(1, len(ys)):
 
-        value = ys[i]  # assumed to be alive
+        value = ys[i]  # sort both alive and dead particles to keep dead indices equally spaced ?
 
         swaps = 0
         j = i - 1
-        x, y, vx, vy, where, color = xs[i], ys[i], vxs[i], vys[i], wheres[i], colors[i]
+        x, y, vx, vy, where, lastColl = xs[i], ys[i], vxs[i], vys[i], wheres[i], lastColls[i]
 
         while value < ys[j] and j >= 0:
-            roll1(j + 1, xs, ys, vxs, vys, wheres, colors)
+            roll1(j + 1, xs, ys, vxs, vys, wheres, lastColls)
             swaps += 1
             j = j - 1
 
         if swaps > 0:
-            xs[j + 1], ys[j + 1], vxs[j + 1], vys[j + 1], wheres[j + 1], colors[j + 1] = x, y, vx, vy, where, color
+            xs[j + 1], ys[j + 1], vxs[j + 1], vys[j + 1], wheres[j + 1], lastColls[j + 1] = x, y, vx, vy, where, lastColl
 
     return swaps
 
@@ -213,7 +216,7 @@ def sortCell(xs, ys, vxs, vys, wheres, colors):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def movingWallInteraction(xs, vxs, vys, wheres, x, v, dt, mp, m):
+def movingWallInteraction(xs, vxs, vys, wheres,lastColls, x, v, dt, mp, m,time):
     """
     update coordinates and velocities of particles interacting left wall (if exists)
     The exact time (if wall velocity is constant) is first computed ; then the particle is correctly bounced back
@@ -222,19 +225,19 @@ def movingWallInteraction(xs, vxs, vys, wheres, x, v, dt, mp, m):
     :param vxs: array containing x velocities of particles
     :param vys: array containing x velocities of particles
     :param wheres: mask array
+    :param lastColls: last collision array
     :param x : x coordinate of wall
     :param v : velocity coordinate of wall
     :param dt : time step
     :param mp : mass of particle
     :param m : mass of wall
-
+    :param time: current time
     :return: Force applied to wall at both sides
     """
+
     fpl = 0.
     fpr = 0.
     for i in range(len(xs)):
-
-        # bounce on moving wall must be taken into account more precisely
 
         if wheres[i] * (xs[i] - x) < 0:
             # particle crossed the wall, in either direction
@@ -244,12 +247,14 @@ def movingWallInteraction(xs, vxs, vys, wheres, x, v, dt, mp, m):
                 continue
 
             # move backward the particle
+
             xs[i] -= vxs[i] * delta
+            lastColls[i] = time - delta
 
             # bounce and compute force applied to wall
             # newV = (2 * m * v + (mp - m) * vxs[i]) / (m + mp)
 
-            newV = -  vxs[i] + 2 * v  # infinitely massive wall
+            newV = - vxs[i] + 2 * v  # infinitely massive wall
 
             if wheres[i] < 0:
                 fpl += - (newV - vxs[i]) * mp / dt
@@ -257,7 +262,7 @@ def movingWallInteraction(xs, vxs, vys, wheres, x, v, dt, mp, m):
                 fpr += - (newV - vxs[i]) * mp / dt
 
             vxs[i] = newV
-            vys[i] *= (-1) ** getrandbits(1)
+            #vys[i] *= (-1) ** getrandbits(1)
 
             # move forward the particle
             xs[i] += vxs[i] * delta
@@ -266,17 +271,19 @@ def movingWallInteraction(xs, vxs, vys, wheres, x, v, dt, mp, m):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInteractionLeft(xs, vxs, vys, wheres, left, dt, m):
+def staticWallInteractionLeft(xs, vxs, vys, wheres,lastColls, left, dt, m,time):
     """
-        update coordinates and velocities of particles interacting left wall (is exists)
+        update coordinates and velocities of particles interacting with left static wall (if exists)
 
         :param xs: array containing x coordinates of particles
         :param vxs: array containing x velocities of particles
         :param vys: array containing x velocities of particles
         :param wheres: mask array
+        :param lastColls: last collision array
         :param left: left coordinate of cell
         :param dt: time step for simulation (all collision between particles and walls occurred within dt)
         :param m: mass of particles (all supposed equals)
+        :param time: current time
         return: fleft (computed positively)
         """
 
@@ -286,44 +293,51 @@ def staticWallInteractionLeft(xs, vxs, vys, wheres, left, dt, m):
             continue
 
         if xs[i] < left:
+            odt = abs( (xs[i] - left) / vxs[i])
+            lastColls[i] = time - odt
             xs[i] = 2 * left - xs[i]
             vxs[i] *= -1
-            vys[i] *= (-1) ** getrandbits(1)
+            #vys[i] *= (-1) ** getrandbits(1)
 
             fleft += abs(vxs[i])
     return fleft * 2 * m / dt
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInteractionRight(xs, vxs, vys, wheres, right, dt, m):
+def staticWallInteractionRight(xs, vxs, vys, wheres, lastColls, right, dt, m,time):
     """
-        update coordinates and velocities of particles interacting left wall (is exists)
+        update coordinates and velocities of particles interacting left wall (if exists)
 
         :param xs: array containing x coordinates of particles
         :param vxs: array containing x velocities of particles
         :param vys: array containing y velocities of particles
         :param wheres: mask array
+        :param lastColls: last collision array
         :param right: right coordinate of cell
         :param dt: time step for simulation (all collision between particles and walls occurred within dt)
         :param m: mass of particles (all supposed equals)
+        :param time: current time
         return: fright (computed positively)
         """
 
     fright = 0.
+
     for i in range(len(xs)):
         if wheres[i] == 0:
             continue
 
         if xs[i] > right:
+            odt = abs( (xs[i] - right) / vxs[i])
+            lastColls[i] = time - odt
             xs[i] = 2 * right - xs[i]
             vxs[i] *= -1
-            vys[i] *= (-1) ** getrandbits(1)
+            #vys[i] *= (-1) ** getrandbits(1)
             fright += abs(vxs[i])
     return fright * 2 * m / dt
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def staticWallInterractionUpAndDown(ys, vxs, vys, wheres, width, dt, m, vStar):
+def staticWallInterractionUpAndDown(ys, vxs, vys, wheres,lastColls, width, dt, m, vStar,time):
     """
     update coordinates and velocities of particles interacting with solid walls (which are horizontal)
     Compute the forces applied to both walls
@@ -332,14 +346,17 @@ def staticWallInterractionUpAndDown(ys, vxs, vys, wheres, width, dt, m, vStar):
     :param vxs: array containing y velocities of particles
     :param vys: array containing y velocities of particles
     :param wheres: mask array
+    :param lastColls: last collision array
     :param width: width of the cell
     :param dt: time step for simulation (all collision between particles and walls occurred within dt)
     :param m: mass of particles (all supposed equals)
     :param vStar: quadratic mean velocity
+    :param time: current time
     :return: fup,fdown, the two forces (computed positively)
     """
     fup, fdown = 0., 0.
     sqtwo = (4 / 3) ** 0.5
+    odt = 0.
 
     for i in range(len(ys)):
         if wheres[i] == 0:
@@ -347,20 +364,24 @@ def staticWallInterractionUpAndDown(ys, vxs, vys, wheres, width, dt, m, vStar):
 
         bounce = False
         if ys[i] < 0:
+
             ys[i] *= -1
+            odt = abs(ys[i] / vys[i])
             bounce = True
 
         elif ys[i] > width:
+            odt = abs((ys[i]-width) / vys[i])
             ys[i] = 2 * width - ys[i]
             bounce = True
 
         if bounce:
             vOld = vys[i]
+            lastColls[i] = time - odt # time of particle/wall collision must be computed
             if vStar > 0:
                 vxs[i] = np.random.normal(0, vStar / sqtwo, 1)[0]
                 vys[i] = - abs(np.random.normal(0, vStar / sqtwo, 1)[0]) * vOld / abs(vOld)
             else:
-                #vxs[i] *= (-1) ** getrandbits(1)
+                #vxs[i] *= (-1) ** getrandbits(1)  # used for PRA (velocity reversal cause rugous wall behavior)
                 vys[i] *= -1
 
             fup += abs(vys[i] - vOld) / 2  # f = -2 * vy * ms * dn / dt
@@ -373,33 +394,7 @@ def staticWallInterractionUpAndDown(ys, vxs, vys, wheres, width, dt, m, vStar):
 ##############################################################
 
 
-@jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def ComputeXVelocityBinsOld(ys, ymax, vxs, wheres, bins):
-    """
-    :param ys:  y positions
-    :param ymax:  max y value
-    :param vxs: x velocities
-    :param wheres: mask array
-    :param bins: list dedicated to store the means
-    :return: modified bins
-    """
-    ns = [0.] * len(bins)
-    delta = ymax / (len(bins) - 1)
-    for i in range(len(vxs)):
-        if wheres[i] == 0:
-            continue
-        k = int(ys[i] / delta)
-        alphakp = (ys[i] - k * delta) / delta
-        alphak = 1 - alphakp
 
-        bins[k] += vxs[i] * alphak
-        ns[k] += alphak
-        bins[k + 1] += vxs[i] * alphakp
-        ns[k + 1] += alphakp
-
-    for i in range(len(bins)):
-        bins[i] /= max(ns[i], 1)
-    return bins
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
@@ -513,8 +508,8 @@ def computeEcs(vxs, vys, wheres, m):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def detectCollisionsAtInterface(indices, nindices, xs, ys, vxs, vys, wheres, colors, nxs, nys, nvxs, nvys, nwheres,
-                                ncolors, dt, d):
+def detectCollisionsAtInterface(indices, nindices, xs, ys, vxs, vys, wheres, lastColls, nxs, nys, nvxs, nvys, nwheres,
+                                nlastColls, dt, d, time):
     """
         This method update particle positions and velocities taking into account elastic collisions
         It is focused on collisions occurring between particles from different cells only.
@@ -524,11 +519,6 @@ def detectCollisionsAtInterface(indices, nindices, xs, ys, vxs, vys, wheres, col
 
         coords variable with n refers to the other cell
     """
-
-    ra = np.array([0., 0.])
-    rb = np.array([0., 0.])
-    va = np.array([0., 0.])
-    vb = np.array([0., 0.])
 
     nbCollide = 0
     i = 0
@@ -550,42 +540,18 @@ def detectCollisionsAtInterface(indices, nindices, xs, ys, vxs, vys, wheres, col
                 continue
 
             maxDeltaY = max(maxDeltaY, (abs(vys[ii]) + abs(nvys[jj])) * dt + d  )
-
             deltay = nys[jj] - ys[ii]  # y spacing between ii and jj particle
 
             if nys[jj] < nextY - maxDeltaY:
                 otherFirst = j
 
             if abs(deltay) < maxDeltaY:
-
-                # deal with collision:
-                coll, t = isCollidingFast(xs[ii], ys[ii], nxs[jj], nys[jj], vxs[ii], vys[ii], nvxs[jj], nvys[jj], dt, d)
-
+                coll, odt = isCollidingFast(xs[ii], ys[ii], nxs[jj], nys[jj], vxs[ii], vys[ii], nvxs[jj], nvys[jj], dt, d, lastColls[ii], nlastColls[jj], time)
                 if coll:
                     nbCollide += 1.
-
-                    # restore locations before collision
-
-                    xs[ii] -= t * vxs[ii]
-                    ys[ii] -= t * vys[ii]
-                    nxs[jj] -= t * nvxs[jj]
-                    nys[jj] -= t * nvys[jj]
-
-                    # update velocities
-                    ra[0], ra[1] = xs[ii], ys[ii]
-                    rb[0], rb[1] = nxs[jj], nys[jj]
-                    va[0], va[1] = vxs[ii], vys[ii]
-                    vb[0], vb[1] = nvxs[jj], nvys[jj]
-                    vfa, vfb = bounce(ra, rb, va, vb)
-                    vxs[ii], vys[ii] = vfa[0], vfa[1]
-                    nvxs[jj], nvys[jj] = vfb[0], vfb[1]
-
-                    # re-shift particles
-                    xs[ii] += t * vxs[ii]
-                    ys[ii] += t * vys[ii]
-                    nxs[jj] += t * nvxs[jj]
-                    nys[jj] += t * nvys[jj]
-
+                    lastColls[ii] = time - odt
+                    nlastColls[jj] = time - odt
+                    dealWithCollision(xs, ys, vxs, vys, nxs, nys, nvxs, nvys, ii, jj, odt)
             else:
                 if deltay > maxDeltaY:
                     break
@@ -601,8 +567,43 @@ def detectCollisionsAtInterface(indices, nindices, xs, ys, vxs, vys, wheres, col
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, indicesLeft, indicesRight, dt, d, histo, coloringPolicy,
-                        left, right):
+def dealWithCollision(xs, ys, vxs, vys, nxs, nys, nvxs, nvys,i,ni,t):
+    """
+    variables starting by n concern second particle, which may be located on different arrays (collisions at interface)
+    """
+    # restore locations before collision
+    xs[i] -= t * vxs[i]
+    ys[i] -= t * vys[i]
+    nxs[ni] -= t * nvxs[ni]
+    nys[ni] -= t * nvys[ni]
+
+    ra = np.array([0., 0.])
+    rb = np.array([0., 0.])
+    va = np.array([0., 0.])
+    vb = np.array([0., 0.])
+
+    # update velocities
+    ra[0], ra[1] = xs[i], ys[i]
+    rb[0], rb[1] = nxs[ni], nys[ni]
+    va[0], va[1] = vxs[i], vys[i]
+    vb[0], vb[1] = nvxs[ni], nvys[ni]
+
+    vfa, vfb = bounce(ra, rb, va, vb)
+
+    vxs[i], vys[i] = vfa[0], vfa[1]
+    nvxs[ni], nvys[ni] = vfb[0], vfb[1]
+
+    # re-shift particles
+    xs[i] += t * vxs[i]
+    ys[i] += t * vys[i]
+    nxs[ni] += t * nvxs[ni]
+    nys[ni] += t * nvys[ni]
+
+
+
+@jit(nopython=True, cache=True, fastmath=True, nogil=True)
+def detectAllCollisions(xs, ys, vxs, vys, wheres, lastColls, indicesLeft, indicesRight, dt, d, histo, coloringPolicy,
+                        left, right, time):
     """
     This method update particle positions and velocities taking into account elastic collisions
     It first tries to detect efficiently if collisions occurred,
@@ -614,90 +615,79 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, colors, indicesLeft, indicesRi
     :param vxs:
     :param vys:
     :param wheres:
-    :param colors:
+    :param lastColls: used to store the last time of collision
     :param indicesLeft: arrays where indices of particles which are at left side of cell are stored
     :param indicesRight: arrays where indices of particles which are at right side of cell are stored
     :param dt: time step
     :param d: particle diameter
-    :param histo: histogram of collisions detection according to j-i for storing purpose
+    :param histo: not used in this algorithm ; stays here to mimic behavior of old function
     :param coloringPolicy: (str), colors updated according to policy
     :param left : left coord of cell
     :param right : right coord of cell
+    :param time : current time
 
     :return: number of collisions
     """
-    nbCollide = 0.
-    ra = np.array([0., 0.])
-    rb = np.array([0., 0.])
-    va = np.array([0., 0.])
-    vb = np.array([0., 0.])
+    nbCollide = 0
+    secureSearchCoeff = 1.1
 
     ln = len(xs)
-    nbSearch = len(histo)
-    vxmax = 0
     leftIndex = 0
     rightIndex = 0
 
-    for i in range(ln - 1):  # last particle can't collide to anyone
-        if wheres[i] == 0:
+    vymax = 0
+    for i in range(ln):
+        if wheres[i] == 0:  # ghost particle
             continue
 
-        vxmax = max(vxmax, abs(vxs[i]))
+        # searching vymax :
+        vymax = max(vymax,abs(vys[i]))
 
-        if xs[i] < left + abs(vxs[i] * dt) + d:   # better use a less restrictive criteria
+        # detect indices of particles closes to sides of cell
+        both = 0
+        if xs[i] < left + (abs(vxs[i] * dt) + d) * secureSearchCoeff:  # better use a less restrictive criteria
             indicesLeft[leftIndex] = i
             leftIndex += 1
+            both += 1
 
-        if xs[i] > right - abs(vxs[i] * dt) - d:   # same comment
+        if xs[i] > right - (abs(vxs[i] * dt) + d) * secureSearchCoeff:  # same comment
             indicesRight[rightIndex] = i
             rightIndex += 1
+            both += 1
+        if both == 2:
+            print("particle in both neighborhoods : cells too thins")
 
-        for j in range(i + 1, min(len(xs), i + nbSearch)):
-            if wheres[i] * wheres[j] <= 0:  # different side (<0) or one dead particle (==0)
+    # searching all possible collisions :
+    for i in range(ln - 1):  # last particle can't collide to anyone else
+
+        if wheres[i] == 0:  # ghost particle
+            continue
+
+        x, y, vx, vy, w, lc = xs[i], ys[i], vxs[i], vys[i],wheres[i], lastColls[i] # read once !
+
+        for j in range(i + 1, ln):
+            if w * wheres[j] <= 0:  # different side (<0) or one dead particle (==0)
+                # or particle which has already collided
                 continue
 
-            coll, t = isCollidingFast(xs[i], ys[i], xs[j], ys[j], vxs[i], vys[i], vxs[j], vys[j], dt, d)
+            # The following is very important, this criterion is used to stop the searches for part i and step to part
+            # i+1.  If too restrictive, collisions might be missed. If too broad, computation time may increase
+            if abs(ys[j]-y) > ((-vy + vymax) * dt + d)*secureSearchCoeff:
+                break  # if here, other particles are too high to be able to interact with particle i
+
+            coll, odt = isCollidingFast(x, y, xs[j], ys[j], vx, vy, vxs[j], vys[j], dt, d, lc, lastColls[j],time)
 
             if coll:
-                # record strategy
-                histo[j - i] += 1
-
-                if coloringPolicy == "coll":
-                    colors[i] = 1
-                    colors[j] = 1
-
                 nbCollide += 1.
-
-                # restore locations before collision
-
-                xs[i] -= t * vxs[i]
-                ys[i] -= t * vys[i]
-                xs[j] -= t * vxs[j]
-                ys[j] -= t * vys[j]
-
-                # update velocities
-                ra[0], ra[1] = xs[i], ys[i]
-                rb[0], rb[1] = xs[j], ys[j]
-                va[0], va[1] = vxs[i], vys[i]
-                vb[0], vb[1] = vxs[j], vys[j]
-                vfa, vfb = bounce(ra, rb, va, vb)
-                vxs[i], vys[i] = vfa[0], vfa[1]
-                vxs[j], vys[j] = vfb[0], vfb[1]
-
-                # re-shift particles
-                xs[i] += t * vxs[i]
-                ys[i] += t * vys[i]
-                xs[j] += t * vxs[j]
-                ys[j] += t * vys[j]
-
-    if coloringPolicy == "vx":
-        vxmax = max(vxmax, abs(vxs[-1]))
-        for i in range(ln):
-            if wheres[i] == 0:
+                dealWithCollision(xs, ys, vxs, vys, xs, ys, vxs, vys, i, j, odt)
+                lastColls[i] = time - odt
+                lastColls[j] = time - odt
                 continue
-            colors[i] = vxs[i] / vxmax
+
+
 
     return nbCollide
+
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
@@ -720,7 +710,7 @@ def bounce(ra, rb, va, vb):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
+def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d, lc1, lc2,time):
     """
     Detect whether two particles have collided between t-dt and t
     :param x1: x coord of first particle at time t
@@ -733,9 +723,12 @@ def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
     :param vy2:
     :param dt: time step
     :param d: circle's diameters
+    :param lc1: last collision of particle 1
+    :param lc2: last collision of particle 2
+    :param time: current time
     :return: True if collision occurred, (and its time to remove), else False (and 0 time)
     """
-    if abs(x2 - x1) - d > abs((vx2 - vx1)) * dt:
+    if abs(x2 - x1) - d > abs(vx2 - vx1) * dt or abs(y2 - y1) - d > abs(vy2 - vy1) * dt:
         return False, 0
 
     dvc = (vx2 - vx1) ** 2 + (vy2 - vy1) ** 2
@@ -746,19 +739,25 @@ def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
     b = - 2 * scal
     c = drc - d ** 2
     delta = b ** 2 - 4 * a * c
+
     if delta < 0:
         return False, 0.
 
     if delta >= 0:
         t = (-b + delta ** 0.5) / (2 * a)
         if t < 0:
+            # collision in the future
             return False, 0.
-        elif t > dt:
-            if (x1 - x2) ** 2 + (y1 - y2) ** 2 < d ** 2 :                      # TODO : is this correct ?
-                # in this case, collision has really occurred, but before this time step.
+
+        elif t > dt or time-t < lc1 or time-t < lc2:
+            # collision occurred more than a time step ago, or collision occurred before last collision for i or j
+            # last collision might either be with particle or wall
+            if (x1 - x2) ** 2 + (y1 - y2) ** 2 < d ** 2:
+                # in this case, collision has really occurred as one particle is inside anotherone, but before this time step.
                 # it must be treated.
-                return True, t  # min(t,4*dt)
+                return True, t
             return False, 0.
+
         else:
             return True, t
 
@@ -768,16 +767,20 @@ def isCollidingFast(x1, y1, x2, y2, vx1, vy1, vx2, vy2, dt, d):
 ##############################################################
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def retieveIndex(id, wheres):
+def retrieveIndexs(mid, wheres,start):
     """
     find present index of particle id in particle arrays
-    :param id:
+    :param mid:
     :param wheres : mask array containing list of indices
     :return: index of particle id
     """
-    for i in range(len(wheres)):
-        if wheres[i] == id:
-            return i
+
+    ln = len(wheres)
+    rs = start-int(ln/500)
+    for i in range(ln):
+        index = (rs+i) % ln
+        if wheres[index] == mid:
+            return index
     return -1
 
 

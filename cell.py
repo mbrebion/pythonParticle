@@ -72,9 +72,8 @@ class Cell:
         # living particles
 
         indices = np.linspace(0, self.arraySize - 1, self.nbPart, dtype=np.int32)
-        if self.nbPart != len(np.unique(indices)):
-            print("bad particle number ", self.nbPart, self.arraySize)
-            exit(1)
+        assert(self.nbPart == len(np.unique(indices)))
+
         self.coords.wheres[indices] = range(1, self.nbPart + 1)
         self.coords.wheres[indices] += self.startIndex
 
@@ -93,6 +92,10 @@ class Cell:
         self.wall = None
 
     def zeroV_xYVelocityProfile(self, y):
+        """
+        initial velocity profile against y coordinate
+        zero by default ; can be overridden
+        """
         return 0.
 
     def randomInit(self, effectiveTemp):
@@ -110,11 +113,13 @@ class Cell:
 
         # locations and states
         if ComputedConstants.fillRatio < 0.1:
+
             # random init
             self.coords.xs = self.left + (np.random.random(self.arraySize)) * self.length
             for i in range(self.arraySize):
                 self.coords.ys[i] = (i + 0.5) * ComputedConstants.width / self.arraySize
         else:
+            print("cristal like init")
             # cristal like init
             L = self.length
             H = ComputedConstants.width
@@ -277,17 +282,17 @@ class Cell:
                                                   ComputedConstants.boundaryTemperature)
 
         fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.coords.ys, self.coords.vxs, self.coords.vys,
-                                                                      self.coords.wheres, ComputedConstants.width,
+                                                                      self.coords.wheres,self.coords.lastColls, ComputedConstants.width,
                                                                       ComputedConstants.dt, ComputedConstants.ms,
-                                                                      vStarBoundary)
+                                                                      vStarBoundary,ComputedConstants.time)
 
         # moving Wall
         if self.wall is not None:
             fpl, fpr = numbaAccelerated.movingWallInteraction(self.coords.xs, self.coords.vxs, self.coords.vys,
-                                                              self.coords.wheres, self.wall.location(),
+                                                              self.coords.wheres,self.coords.lastColls, self.wall.location(),
                                                               self.wall.velocity(),
                                                               ComputedConstants.dt, ComputedConstants.ms,
-                                                              self.wall.mass())
+                                                              self.wall.mass(),ComputedConstants.time)
             self.wall.addToForce(fpl, fpr)
 
         fleft = -1
@@ -296,14 +301,14 @@ class Cell:
         # left wall
         if self.leftCell is None and not ComputedConstants.periodic:
             fleft = numbaAccelerated.staticWallInteractionLeft(self.coords.xs, self.coords.vxs, self.coords.vys,
-                                                               self.coords.wheres, self.left, ComputedConstants.dt,
-                                                               ComputedConstants.ms)
+                                                               self.coords.wheres,self.coords.lastColls, self.left, ComputedConstants.dt,
+                                                               ComputedConstants.ms,ComputedConstants.time)
 
         # right wall
         if self.rightCell is None and not ComputedConstants.periodic:
             fright = numbaAccelerated.staticWallInteractionRight(self.coords.xs, self.coords.vxs, self.coords.vys,
-                                                                 self.coords.wheres, self.right, ComputedConstants.dt,
-                                                                 ComputedConstants.ms)
+                                                                 self.coords.wheres,self.coords.lastColls, self.right, ComputedConstants.dt,
+                                                                 ComputedConstants.ms,ComputedConstants.time)
 
         self.computePressure(fup, fdown, fleft, fright)
 
@@ -314,7 +319,8 @@ class Cell:
                                                                                        *self.coords.tpl,
                                                                                        *self.leftCell.coords.tpl,
                                                                                        ComputedConstants.dt,
-                                                                                       ComputedConstants.ds)
+                                                                                       ComputedConstants.ds,
+                                                                                       ComputedConstants.time)
 
     def collide(self):
         """
@@ -322,20 +328,20 @@ class Cell:
         nbNeighbour is the number of neighbours par particle i which are checked
         :return: None
         """
-        if Cell.coloringPolicy == "coll":
-            self.coords.colors *= ComputedConstants.decoloringRatio
 
         self.lastNbCollide = numbaAccelerated.detectAllCollisions(*self.coords.tplExtended,
                                                                   ComputedConstants.dt,
                                                                   ComputedConstants.ds,
                                                                   self.histo, Cell.coloringPolicy, self.left,
-                                                                  self.right)
+                                                                  self.right, ComputedConstants.time)
 
     def improveCollisionDetectionSpeed(self):
         """
         Improve collision detectionSpeed by estimated the smallest number of neighbor to check for collision
         :return: None
         """
+        if np.sum(self.histo)==0:
+            return
         try:
             ln = len(self.histo)
             h = np.array(self.histo, dtype=float)
@@ -356,6 +362,8 @@ class Cell:
             DeltaMax = max(int(0.5 + k + np.log(0.1 / Sk) / np.log(xk)), 12)
         except RuntimeWarning:
             DeltaMax = thermo.getNCollisionEstimate(self.nbPart, ComputedConstants.ls, ComputedConstants.width,constants.drOverLs)
+
+        DeltaMax = int(DeltaMax* 1.5)
 
         self.histo = np.zeros(DeltaMax, dtype=int)
 
@@ -410,12 +418,8 @@ class Cell:
         if Cell.collision:
             self.sort()
             self.collide()
-            if (ComputedConstants.it + 250) % 500 == 0:
-                self.improveCollisionDetectionSpeed()
+#            if (ComputedConstants.it + 250) % 500 == 0:
+#                self.improveCollisionDetectionSpeed()
 
         self.updateConstants()
 
-
-#TODO : what if particle collide with rigid and moving wall in the same time step ?
-#TODO : does it happen in practice ?
-#TODO : without moving wall, it should work whatever the order

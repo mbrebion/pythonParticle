@@ -88,6 +88,53 @@ class Domain:
     def addTracker(self, id):
         self.trackers.append(tracker.Tracker(self, id))
 
+
+    def reshapeCells(self):
+        """
+        This function moves cells boundaries to equilibrate the number of particles (usefull with moving wall)
+        :return: None
+        """
+
+        L = self.cells[-1].right
+        def move():
+
+            ns = []
+            nsCum = [0]
+            nTot = 0
+
+            delta = (self.cells[0].right - self.cells[0].left)/100
+            k =len(self.cells)
+            for c in self.cells:
+                n = c.count()
+                ns.append(n)
+                nsCum.append(n + nsCum[-1])
+                nTot += n
+            nAvg = nTot/k
+            nsCum.remove(0)
+
+            xs = []
+            ds = []
+            for i in range(len(self.cells)):
+                xs.append(self.cells[i].left)
+                ds.append(self.cells[i].right - self.cells[i].left)
+            xs.append(L)
+
+            xps = [0]
+            for i in range(len(self.cells)):
+                alpha = 3*(1. - ns[i] /nAvg)
+                xps.append( xps[-1] + ds[i] + delta * alpha)
+
+            for i in range(len(self.cells)):
+                self.cells[i].left = xps[i]
+                self.cells[i].right = xps[i+1]
+            return ns,xs
+
+        ns=[]
+        for _ in range(2):
+            ns,xs=move()
+
+
+
     ##############################################################
     ################## Compute thermodynamic      ################
     ##############################################################
@@ -190,7 +237,7 @@ class Domain:
         self.itCount = 0
 
     def countCollisions(self):
-        a = 1 / (2 + self.itCount)
+        a = 1 / (1 + self.itCount)
         self.itCount += 1
         inside = 0
         interface = 0
@@ -241,6 +288,9 @@ class Domain:
             t.doMeasures()
 
         self.countCollisions()
+        if ComputedConstants.it % 10 == 0:
+            self.reshapeCells()
+
 
     def _updateSingleT(self):
         ComputedConstants.it += 1  # to be moved upper once cells are gathered in broader class
@@ -268,3 +318,6 @@ class Domain:
             t.doMeasures()
 
         self.countCollisions()
+
+        if ComputedConstants.it % 10 == 0:
+            self.reshapeCells()

@@ -5,9 +5,9 @@ from domain import Domain
 from constants import ComputedConstants
 import numpy as np
 
-X = 0.2
+X = 0.1
 Y = 0.1
-nPart = 256000
+nPart = 8000
 T = 300
 P = 1e5
 eta = 0.05
@@ -18,8 +18,8 @@ ds = math.sqrt(eta * X * Y / nPart / math.pi) * 2
 # ( P S ) / (N k T) = 1 / (1-eta)^2  <- better model
 
 ComputedConstants.thermodynamicSetupFixedDiameter(T, X, Y, P, nPart, ds)
-domain = Domain(64)
-domain.setMaxWorkers(4)
+domain = Domain(1)
+domain.setMaxWorkers(1)
 
 ps = []
 ts = []
@@ -63,13 +63,13 @@ Z     1.000204,   1.00062,   1.00208,   1.00597,   1.01999,    1.0626,    1.2344
 
 # eta = 0.05   : theoretical target : 110803
 # 1 domain
-# P = 110852
-# nbColl = 306.92
+# P = 205811
+# nbColl = 499.4
 
 
-# eta = 0.05 ; 8 domains ; # with interface collisions
-# P = 110890
-# nbColl : 304.884 + 2.067 = 306.95
+# 16 domains ; # without interface collisions
+# P = 211519
+# nbColl : 1261
 
 
 # 16 domains ; # with interface collisions
