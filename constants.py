@@ -1,5 +1,6 @@
 import thermo
 import math
+import numpy as np
 
 MASS = 4.83e-26  # kg ; mean mass of air particle
 Kb = 1.38e-23  # USI ; Boltzmann constant
@@ -8,7 +9,7 @@ Z = 1  # m ; S*Z = V
 
 
 drOverLs = 0.02  # if low, accurate simulations (less probability for multiple collisions during one timestep)
-INITSIZEEXTRARATIO = 1.35 # because of dynamic reshaping of cells, large value is not required anymore
+INITSIZEEXTRARATIO = 1.3 # because of dynamic reshaping of cells, large value is not required anymore
 
 
 DEAD = 0
@@ -36,14 +37,14 @@ class ComputedConstants:
     it = None
     nbCells = None
     decoloringRatio = 0.85
-    alphaAveraging = 0.025  # temperature and pressure averaging
+    alphaAveraging = 0.01  # temperature and pressure averaging
     periodic = False
     forceX = 0. # horizontal force applied
     ls = 0.
 
-
     # for wall
-    boundaryTemperature = -1  # if positive, temperature imposed at walls
+    boundaryTemperatureDown = -1  # if positive, temperature imposed at walls
+    boundaryTemperatureUp = -1  # if positive, temperature imposed at walls
 
     # for opengl
     resX = None
@@ -86,6 +87,7 @@ class ComputedConstants:
         print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
         print("Kbs = ", "{:.2e}".format(cls.kbs), "J/K")
         print("ms = ", "{:.2e}".format(cls.ms), "kg")
+        print("total gas mass = ", "{:.2e}".format(cls.ms * nbPartTarget), "kg")
         print("diameter = ", "{:.5e}".format(cls.ds), "m")
         print("v* = ", "{:.5e}".format(cls.vStar), "m/s")
         print("dOM/L = v*dt/L = ", "{:.2e}".format(cls.vStar * cls.dt / cls.length))
@@ -137,6 +139,7 @@ class ComputedConstants:
         print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
         print("Kbs = ", "{:.2e}".format(cls.kbs), "J/K")
         print("ms = ", "{:.2e}".format(cls.ms), "kg")
+        print("total gas mass = ", "{:.2e}".format(cls.ms * nbPartTarget), "kg")
         print("diameter = ", "{:.5e}".format(cls.ds), "m")
         print("v* = ", "{:.5e}".format(cls.vStar), "m/s")
         print("dOM/L = v*dt/L = ", "{:.2e}".format(cls.vStar * cls.dt / cls.length))

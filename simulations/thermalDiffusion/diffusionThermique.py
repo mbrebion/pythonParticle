@@ -4,60 +4,69 @@ from constants import ComputedConstants
 from domain import Domain
 
 
-def printList(l, name):
+def printList(l, name,file):
+    f = open(file, "a")
     out = "["
     for v in l:
         out += str(v) + ","
     out = out[0:-1] + "])"
-    print(name, "= np.array(", out)
+    f.write(name+ "= np.array("+ out+"\n")
+    f.close()
 
 
 X = 1
 Y = 0.1
-ls = 5e-3
+ls = 20e-3
 
-nPart = 64000
+nPart = 256000
 T = 300
 P = 1e5
 
-ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
-ComputedConstants.dt *= 1
-nbDomains = 16
-tHigh = 320.
-tLow = 2 * T - tHigh
-alpha = tLow / tHigh
-rg = alpha / (1 + alpha)
-rd = 1 - rg
-print(rg, rd)
+for ii in range(7,16):
+    ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
+    ComputedConstants.dt *= 1
+    nbDomains = 16
+    tHigh = 320.
+    tLow = 2 * T - tHigh
+    alpha = tLow / tHigh
+    rg = alpha / (1 + alpha)
+    rd = 1 - rg
+    rg,rd = 2*rg, 2*rd
 
-effectiveTemps = [tHigh for i in range(nbDomains)]
-ratios = [rg / 5 for i in range(nbDomains)]
-for j in range(nbDomains // 2, nbDomains):
-    effectiveTemps[j] = tLow
-    ratios[j] = rd / 5
+    effectiveTemps = [tHigh for i in range(nbDomains)]
+    ratios = [rg / nbDomains for i in range(nbDomains)]
+    for j in range(nbDomains // 2, nbDomains):
+        effectiveTemps[j] = tLow
+        ratios[j] = rd / nbDomains
 
-domain = Domain(nbDomains, effectiveTemps=effectiveTemps, ratios=ratios)
-domain.setMaxWorkers(3)
+    domain = Domain(nbDomains, effectiveTemps=effectiveTemps, ratios=ratios)
+    domain.setMaxWorkers(4)
 
-instants = []
-temps = []
+    instants = []
+    temps = []
 
-it = 0
-itMax = 1e5
-instants.append(ComputedConstants.time)
-temps.append(domain.getAveragedTemperatures())
-ComputedConstants.alphaAveraging = 0.1
-while it < itMax:
-    it += 1
-    domain.update()
+    it = 0
 
-    if it % 500 == 0:
-        print(100 * it / itMax, "%")
-        print(domain.getAveragedTemperatures(), ComputedConstants.alphaAveraging)
-    if it % 500 == 0:
-        instants.append(ComputedConstants.time)
-        temps.append(domain.getAveragedTemperatures())
+    tMax = 24e-3 #s
 
+    instants.append(ComputedConstants.time)
+    temps.append(domain.getAveragedTemperatures())
+    ComputedConstants.alphaAveraging = 0.05
+    while ComputedConstants.time <= tMax:
+        it += 1
+        domain.update()
 
-printList(instants, "ts")
-printList(temps, "temps")
+        if it%20 == 0:
+            domain.getAveragedTemperatures()
+
+        if it % 1000 == 1:
+            time.sleep(3)
+            print(100 * ComputedConstants.time/tMax, "%")
+            print(domain.getAveragedTemperatures(), ComputedConstants.alphaAveraging)
+        if it % 1000 == 1:
+            instants.append(ComputedConstants.time)
+            temps.append(domain.getAveragedTemperatures())
+
+    file = "runls20mm_highdiff_"+str(ii)+".py"
+    printList(instants, "ts",file)
+    printList(temps, "temps",file)

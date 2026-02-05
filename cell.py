@@ -1,8 +1,4 @@
-import math
-
 import numpy as np
-
-import constants
 import numbaAccelerated
 from constants import *
 from coords import Coords
@@ -13,7 +9,7 @@ class Cell:
     coloringPolicy = "none"  # might be "coll", "vx" or "fixed"
     collision = True
 
-    def __init__(self, nbPart, effectiveTemp, left, right, startIndex, nbPartTarget=None, v_xYVelocityProfile=None):
+    def __init__(self, nbPart, effectiveTemp, left, right, startIndex, nbPartTarget=None, v_xYVelocityProfile=None,colorRatio=1):
         """
         Create a cell
         :param nbPart: effective number of part in cell
@@ -23,6 +19,7 @@ class Cell:
         :param startIndex: first id of particle lying in this cell
         :param nbPartTarget: target numer of particles. Useful if initial number of particle is way lower than the target
         :param v_xYVelocityProfile: v_x(y) mean velocity profile to be imposed at startup
+        :param colorRatio : ratio of particles to colorize in white (1)
         """
 
         self.lastNbCollide = 0
@@ -43,11 +40,6 @@ class Cell:
             nbPartTarget = self.nbPart
         self.arraySize = int(nbPartTarget * INITSIZEEXTRARATIO)
 
-        nb = thermo.getNCollisionEstimate(nbPartTarget, ComputedConstants.ls, ComputedConstants.width,constants.drOverLs)
-        self.histo = np.zeros(nb, dtype=int)
-
-        # the amount of neighbors checked for collisions is adapted dynamically to ensure fast computations
-        # and miss less than 0.1 % of collisions
 
         # time and iterations count
         self.it = 0
@@ -72,7 +64,9 @@ class Cell:
         # living particles
 
         indices = np.linspace(0, self.arraySize - 1, self.nbPart, dtype=np.int32)
+
         assert(self.nbPart == len(np.unique(indices)))
+
 
         self.coords.wheres[indices] = range(1, self.nbPart + 1)
         self.coords.wheres[indices] += self.startIndex
@@ -82,7 +76,7 @@ class Cell:
         self.positions = np.zeros((self.arraySize, 2), dtype=float)  # not used for computations but for opengl draws
 
         # init of locations and velocities
-        self.randomInit(effectiveTemp)
+        self.randomInit(effectiveTemp,colorRatio)
 
         # neighboring cells
         self.leftCell = None
@@ -98,11 +92,13 @@ class Cell:
         """
         return 0.
 
-    def randomInit(self, effectiveTemp):
+    def randomInit(self, effectiveTemp,colorRatio):
         vStar = thermo.getMeanSquareVelocity(ComputedConstants.kbs, ComputedConstants.ms, effectiveTemp)
 
         self.coords.vxs = np.random.normal(0, vStar / 2 ** 0.5, self.arraySize)
         self.coords.vys = np.random.normal(0, vStar / 2 ** 0.5, self.arraySize)
+
+        self.coords.colors = np.random.choice([2.,1.], self.arraySize, p=[1-colorRatio, colorRatio])
 
         # enforce true temperature
         indices = np.nonzero(self.coords.wheres != DEAD)
@@ -201,14 +197,27 @@ class Cell:
         self.ec = self.ecl + self.ecr
         return self.ecl, self.ecr
 
+    def computeMacroscopicKineticEnergy(self):
+        """
+        :param x: wall location
+        :return: kinetic energies (left and right of wall)
+        """
+        self.ecl, self.ecr = numbaAccelerated.computeMacroEcs(self.coords.vxs, self.coords.vys, self.coords.wheres,
+                                                         ComputedConstants.ms)
+        self.ec = self.ecl + self.ecr
+        return self.ecl, self.ecr
+
     def computeTemperature(self):
         ecl, ecr = numbaAccelerated.computeEcs(self.coords.vxs, self.coords.vys, self.coords.wheres,
                                                ComputedConstants.ms)
-        self.temperature = (ecl + ecr) / (self.nbPart * ComputedConstants.kbs)
+        self.temperature = (ecl + ecr) / (self.count() * ComputedConstants.kbs)
         alpha = ComputedConstants.alphaAveraging
         self.averagedTemperature = alpha * self.temperature + (1 - alpha) * self.averagedTemperature
 
         return self.temperature
+
+    def computeColorRatio(self):
+        return numbaAccelerated.computeColorRatio(self.coords.wheres,self.coords.colors,1.5)
 
     def computePressure(self, fup, fdown, fleft, fright):
         """
@@ -256,7 +265,7 @@ class Cell:
                                                 ComputedConstants.width)
 
     def applyPeriodic(self):
-        numbaAccelerated.movePeriodically(self.coords.xs, ComputedConstants.length)
+        numbaAccelerated.movePeriodically(self.coords.xs,self.coords.wheres, self.left, self.right)
 
     def prepareSwap(self):
         """
@@ -277,23 +286,34 @@ class Cell:
 
         # up and down
         vStarBoundary = -1
-        if ComputedConstants.boundaryTemperature > 0:
+        if ComputedConstants.boundaryTemperatureUp > 0:
             vStarBoundary = getMeanSquareVelocity(ComputedConstants.kbs, ComputedConstants.ms,
-                                                  ComputedConstants.boundaryTemperature)
+                                                  ComputedConstants.boundaryTemperatureUp)
 
-        fup, fdown = numbaAccelerated.staticWallInterractionUpAndDown(self.coords.ys, self.coords.vxs, self.coords.vys,
-                                                                      self.coords.wheres,self.coords.lastColls, ComputedConstants.width,
+        fup =  numbaAccelerated.staticWallInterractionUp(self.coords.ys, self.coords.vxs, self.coords.vys,
+                                                                      self.coords.wheres,self.coords.lastColls,self.coords.colors, ComputedConstants.width,
                                                                       ComputedConstants.dt, ComputedConstants.ms,
                                                                       vStarBoundary,ComputedConstants.time)
 
+        vStarBoundary = -1
+        if ComputedConstants.boundaryTemperatureDown > 0:
+            vStarBoundary = getMeanSquareVelocity(ComputedConstants.kbs, ComputedConstants.ms,
+                                                  ComputedConstants.boundaryTemperatureDown)
+
+        fdown = numbaAccelerated.staticWallInterractionDown(self.coords.ys, self.coords.vxs, self.coords.vys,
+                                                         self.coords.wheres, self.coords.lastColls, self.coords.colors,
+                                                         ComputedConstants.width,
+                                                         ComputedConstants.dt, ComputedConstants.ms,
+                                                         vStarBoundary, ComputedConstants.time)
+
         # moving Wall
         if self.wall is not None:
-            fpl, fpr = numbaAccelerated.movingWallInteraction(self.coords.xs, self.coords.vxs, self.coords.vys,
-                                                              self.coords.wheres,self.coords.lastColls, self.wall.location(),
+            newX, newV = numbaAccelerated.movingWallInteraction(self.coords.xs, self.coords.vxs, self.coords.vys,
+                                                              self.coords.wheres,self.coords.lastColls,self.coords.colors, self.wall.location(),
                                                               self.wall.velocity(),
                                                               ComputedConstants.dt, ComputedConstants.ms,
                                                               self.wall.mass(),ComputedConstants.time)
-            self.wall.addToForce(fpl, fpr)
+            self.wall.setLocVel(newX,newV)
 
         fleft = -1
         fright = -1
@@ -301,13 +321,13 @@ class Cell:
         # left wall
         if self.leftCell is None and not ComputedConstants.periodic:
             fleft = numbaAccelerated.staticWallInteractionLeft(self.coords.xs, self.coords.vxs, self.coords.vys,
-                                                               self.coords.wheres,self.coords.lastColls, self.left, ComputedConstants.dt,
+                                                               self.coords.wheres,self.coords.lastColls,self.coords.colors, self.left, ComputedConstants.dt,
                                                                ComputedConstants.ms,ComputedConstants.time)
 
         # right wall
         if self.rightCell is None and not ComputedConstants.periodic:
             fright = numbaAccelerated.staticWallInteractionRight(self.coords.xs, self.coords.vxs, self.coords.vys,
-                                                                 self.coords.wheres,self.coords.lastColls, self.right, ComputedConstants.dt,
+                                                                 self.coords.wheres,self.coords.lastColls,self.coords.colors, self.right, ComputedConstants.dt,
                                                                  ComputedConstants.ms,ComputedConstants.time)
 
         self.computePressure(fup, fdown, fleft, fright)
@@ -320,7 +340,8 @@ class Cell:
                                                                                        *self.leftCell.coords.tpl,
                                                                                        ComputedConstants.dt,
                                                                                        ComputedConstants.ds,
-                                                                                       ComputedConstants.time)
+                                                                                       ComputedConstants.time,
+                                                                                       )
 
     def collide(self):
         """
@@ -332,40 +353,10 @@ class Cell:
         self.lastNbCollide = numbaAccelerated.detectAllCollisions(*self.coords.tplExtended,
                                                                   ComputedConstants.dt,
                                                                   ComputedConstants.ds,
-                                                                  self.histo, Cell.coloringPolicy, self.left,
-                                                                  self.right, ComputedConstants.time)
+                                                                  None, Cell.coloringPolicy, self.left,
+                                                                  self.right, ComputedConstants.time
+                                                                  )
 
-    def improveCollisionDetectionSpeed(self):
-        """
-        Improve collision detectionSpeed by estimated the smallest number of neighbor to check for collision
-        :return: None
-        """
-        if np.sum(self.histo)==0:
-            return
-        try:
-            ln = len(self.histo)
-            h = np.array(self.histo, dtype=float)
-
-            h /= (np.sum(h))
-            h *= 100
-            k = 1
-            for i in range(1, ln):
-                if h[i] > h[1] / 4:
-                    k = i
-
-            k = min(int(ln * 0.8), k)  # safeguard
-            Sk = 0
-            for i in range(k, ln):
-                Sk += h[i]
-            xk = 1 - h[k] / Sk
-
-            DeltaMax = max(int(0.5 + k + np.log(0.1 / Sk) / np.log(xk)), 12)
-        except RuntimeWarning:
-            DeltaMax = thermo.getNCollisionEstimate(self.nbPart, ComputedConstants.ls, ComputedConstants.width,constants.drOverLs)
-
-        DeltaMax = int(DeltaMax* 1.5)
-
-        self.histo = np.zeros(DeltaMax, dtype=int)
 
     def sort(self):
         return self.coords.sort()
@@ -409,17 +400,17 @@ class Cell:
     ###################        Update cell       #################
     ##############################################################
 
-
     def update(self):
         # update everything before interface collisions
         self.advect()
-        self.wallBounce()
+
+
 
         if Cell.collision:
             self.sort()
             self.collide()
-#            if (ComputedConstants.it + 250) % 500 == 0:
-#                self.improveCollisionDetectionSpeed()
+
+        self.wallBounce()
 
         self.updateConstants()
 

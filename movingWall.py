@@ -26,12 +26,11 @@ class MovingWall:
     def unSetFree(self):
         self.imposedVelocity = self.savedImposedVelocity
 
-
     def advect(self):
         # update velocity (enforced or computed)
         if self.imposedVelocity is not None:
             t = ComputedConstants.time
-            self._v = self.imposedVelocity(t,self._x)
+            self._v = self.imposedVelocity(t, self._x)
         else:
             self._v += (self._forceLeft + self._forceRight) * ComputedConstants.dt / self._mass
         self._forceLeft = 0
@@ -39,6 +38,10 @@ class MovingWall:
 
         # update location
         self._x += self._v * ComputedConstants.dt
+
+    def setLocVel(self,x,v):
+        self._x = x
+        self._v = v
 
     def addToForce(self, fLeft, fRight):
         """
@@ -66,5 +69,6 @@ class MovingWall:
 
     def getBuffers(self):
         b1 = np.array([self._x * ComputedConstants.resX / ComputedConstants.length, 0., 0.], dtype=float)
-        b2 = np.array([self._x * ComputedConstants.resX / ComputedConstants.length, ComputedConstants.resY, 0.], dtype=float)
+        b2 = np.array([self._x * ComputedConstants.resX / ComputedConstants.length, ComputedConstants.resY, 0.],
+                      dtype=float)
         return b1, b2

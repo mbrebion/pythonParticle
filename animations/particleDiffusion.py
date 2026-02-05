@@ -1,4 +1,4 @@
-from Window import Window
+from animations.Window import Window
 from constants import ComputedConstants
 
 ls = 2*4.8e-3  # mean free path in m

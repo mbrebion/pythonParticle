@@ -1,6 +1,5 @@
 from cell import Cell
 from constants import *
-import tracker
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 from movingWall import MovingWall
@@ -12,7 +11,7 @@ class Domain:
     ###################        Initializing        ###############
     ##############################################################
 
-    def __init__(self, nbCells, *, ratios=None, effectiveTemps=None, periodic=False, v_xYVelocityProfile=None):
+    def __init__(self, nbCells, *, ratios=None, effectiveTemps=None, periodic=False, v_xYVelocityProfile=None,colorRatios = None):
         """
 
         :param nbCells: number of cells used in the simulation
@@ -30,6 +29,9 @@ class Domain:
         if effectiveTemps is None:
             effectiveTemps = [ComputedConstants.initTemp for _ in range(nbCells)]
 
+        if colorRatios is None:
+            colorRatios = [1. for _ in range(nbCells)] # 100% of part in white
+
         nbParts = [int(ComputedConstants.nbPartTarget * ratios[i]) for i in range(nbCells)]
 
         # cells creation
@@ -40,7 +42,7 @@ class Domain:
             right = (i + 1) * ComputedConstants.length / nbCells
 
             c = Cell(nbParts[i], effectiveTemps[i], left, right, startIndex, ComputedConstants.nbPartTarget // nbCells,
-                     v_xYVelocityProfile=v_xYVelocityProfile)
+                     v_xYVelocityProfile=v_xYVelocityProfile,colorRatio = colorRatios[i])
             startIndex += nbParts[i]
             self.cells.append(c)
 
@@ -85,6 +87,13 @@ class Domain:
             c.updateIndicesAccordingToWall(x)
             c.wall = self.wall
 
+    def removeMovingWall(self):
+        self.wall = None
+        for c in self.cells:
+            c.coords.wheres = np.abs(c.coords.wheres)
+            print(c.coords.wheres)
+            c.wall = None
+
     def addTracker(self, id):
         self.trackers.append(tracker.Tracker(self, id))
 
@@ -94,7 +103,7 @@ class Domain:
         This function moves cells boundaries to equilibrate the number of particles (usefull with moving wall)
         :return: None
         """
-
+        return
         L = self.cells[-1].right
         def move():
 
@@ -172,6 +181,19 @@ class Domain:
             vx += c.computeXVelocity()
         return vx / len(self.cells)
 
+    def getAllVelocityNorms(self):
+        c = self.cells[0]
+        vxright = np.extract( c.coords.wheres>0, c.coords.vxs)
+        vxleft = np.extract(c.coords.wheres < 0, c.coords.vxs)
+        if len (self.cells)>1:
+            for c in self.cells[1:]:
+                otherright = np.extract( c.coords.wheres>0, c.coords.vxs)
+                otherleft = np.extract( c.coords.wheres<0, c.coords.vxs)
+                vxright = np.concatenate((vxright,otherright))
+                vxleft = np.concatenate((vxleft, otherleft))
+        return vxleft,vxright
+
+
     def computePressure(self):
         p = 0
         for c in self.cells:
@@ -220,14 +242,35 @@ class Domain:
             ec += ecl + ecr
         return ec
 
+    def computeMacroscopicKineticEnergy(self):
+        ecm = 0.
+        for c in self.cells:
+            ecl, ecr = c.computeMacroscopicKineticEnergy()
+            ecm += ecl + ecr
+        return ecm
+
+    """
     def getAveragedTemperatures(self):
         out = []
         for cell in self.cells:
+            temp = cell.computeTemperature()
             out.append(cell.averagedTemperature)
         return out
+    """
 
     def computeTemperature(self):
-        return self.computeKineticEnergy() / ComputedConstants.nbPartTarget / ComputedConstants.kbs
+        return (self.computeKineticEnergy() - self.computeMacroscopicKineticEnergy())  / ComputedConstants.nbPartTarget / ComputedConstants.kbs
+
+    def computeTemperatureUncorrected(self):
+        return (self.computeKineticEnergy() )  / ComputedConstants.nbPartTarget / ComputedConstants.kbs
+
+
+    def getColorRatios(self):
+        out = []
+        for cell in self.cells:
+            out.append(cell.computeColorRatio())
+        return out
+
 
     def checkSides(self):
         for c in self.cells:
@@ -263,8 +306,13 @@ class Domain:
         self.advectMovingWall()
 
         futures = []
-        for c in self.cells:
-            futures.append(self.pool.submit(c.update))
+        if ComputedConstants.it % 2 == 0:
+            for c in self.cells:
+                futures.append(self.pool.submit(c.update))
+        else:
+            for c in reversed(self.cells):
+                futures.append(self.pool.submit(c.update))
+
         wait(futures, return_when=ALL_COMPLETED)
 
         futures = []
@@ -284,12 +332,12 @@ class Domain:
             for c in self.cells:
                 c.applyPeriodic()
 
-        for t in self.trackers:
-            t.doMeasures()
 
         self.countCollisions()
+
         if ComputedConstants.it % 10 == 0:
             self.reshapeCells()
+
 
 
     def _updateSingleT(self):
@@ -298,8 +346,12 @@ class Domain:
 
         self.advectMovingWall()
 
-        for c in self.cells:
-            c.update()
+        if ComputedConstants.it % 2 == 0:
+            for c in self.cells:
+                c.update()
+        else:
+            for c in reversed(self.cells):
+                c.update()
 
         for c in self.cells:
             c.interfaceCollide()
@@ -314,8 +366,6 @@ class Domain:
             for c in self.cells:
                 c.applyPeriodic()
 
-        for t in self.trackers:
-            t.doMeasures()
 
         self.countCollisions()
 

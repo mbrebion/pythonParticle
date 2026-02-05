@@ -1,4 +1,4 @@
-from Window import Window
+from animations.Window import Window
 from constants import ComputedConstants
 from cell import Cell
 
@@ -8,8 +8,8 @@ ls = Y/25  # mean free path
 T = 300  # K
 P = 1e5  # Pa
 
-window = Window(4000, P, T, X, Y, ls, nbCells=4, periodic=True, resX=1824, resY=1026)
-ComputedConstants.forceX = 6  # N
+window = Window(12000, P, T, X, Y, ls, nbCells=12, periodic=True, resX=1824, resY=1026)
+ComputedConstants.forceX = 8  # N
 ComputedConstants.boundaryTemperature = T
 
 Cell.coloringPolicy = "vx"  # color particles according to vx, blue if <0, red if >0, black if close to 0

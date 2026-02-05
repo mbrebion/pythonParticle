@@ -12,19 +12,21 @@ class Coords:
         self.vys = np.empty(size, dtype=float)
         self.wheres = np.ones(size, dtype=np.int32) * DEAD
         self.lastColls = np.ones(size, dtype=float) * -1
+        self.colors = np.ones(size, dtype=float)  # new !
         self.indicesLeftOfCell = np.zeros(size // 4, dtype=np.int32)-1
         self.indicesRightOfCell = np.zeros(size // 4, dtype=np.int32)-1
+
 
         self.updateTuple()
 
     def updateTuple(self):
-        self.tpl = self.xs, self.ys, self.vxs, self.vys, self.wheres, self.lastColls
-        self.tplExtended = self.xs, self.ys, self.vxs, self.vys, self.wheres, self.lastColls, self.indicesLeftOfCell, self.indicesRightOfCell
+        self.tpl = self.xs, self.ys, self.vxs, self.vys, self.wheres, self.lastColls,self.colors
+        self.tplExtended = self.xs, self.ys, self.vxs, self.vys, self.wheres, self.lastColls, self.colors, self.indicesLeftOfCell, self.indicesRightOfCell
 
 
 
     def sort(self):
-        numbaAccelerated.sortCell(self.xs, self.ys, self.vxs, self.vys, self.wheres, self.lastColls)
+        numbaAccelerated.sortCell(*self.tpl)
 
     def resetSwap(self):
         self.wheres[:] = DEAD
