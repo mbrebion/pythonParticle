@@ -1,26 +1,33 @@
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
+from  scipy.ndimage import convolve1d
 
 font = {'family': 'times',
         'size': 16}
 matplotlib.rc('font', **font)
 
-#l = 20e-3 m
-#Ns = 64000
+ls = 20e-3
+vs = 413
 
-D = 8.28/2
 L = 1
+Tg = 0.7
+Td = 0.3
+
+
+D = ls * vs / np.sqrt(np.pi)
+print("D = "  , round(D,4), "m^2/s")
+tau = 1/(D*np.pi**2/L**2)
+print("tau = "  , round(tau,8), "s")
 
 def getTxt(xs,t):
-    Tg = 0.7
-    Td = 0.3
+
 
     cste = (Tg+Td)/2
     def harmo(n,xs,t):
         kn = np.pi/L + 2*n*np.pi/L
-
-        return (Td-Tg)/(0.5+n)/np.pi * np.exp(-D * kn**2 * t/1000) * np.sin(kn * xs)
+        taun = 1/(D*kn**2)
+        return (Td-Tg)/(0.5+n)/np.pi * np.exp(- t / taun) * np.sin(kn * xs)
 
     sol = xs * 0 + cste
     for i in range(100):
@@ -30,41 +37,37 @@ def getTxt(xs,t):
 
 ######
 
-import runls20mm_lowdiff_1 as run
+import runls20mm_HD_1 as run
 ts = run.ts
 temps=[]
 temps.append(np.copy(run.temps))
 
-
-import runls20mm_lowdiff_2 as run
+import runls20mm_HD_2 as run
 temps.append(np.copy(run.temps))
 
-import runls20mm_lowdiff_3 as run
+import runls20mm_HD_3 as run
 temps.append(np.copy(run.temps))
 
-import runls20mm_lowdiff_4 as run
+import runls20mm_HD_4 as run
 temps.append(np.copy(run.temps))
 
-import runls20mm_lowdiff_5 as run
-temps.append( np.copy(run.temps))
-"""
-import runls20mm_hd_6 as run
-temps.append( np.copy(run.temps))
-"""
-######
-#temps[0][0] += 0.01
-#temps[1][0] -= 0.01
-ts *= 1000
+import runls20mm_HD_5 as run
+temps.append(np.copy(run.temps))
+
+import runls20mm_HD_6 as run
+temps.append(np.copy(run.temps))
 
 n = len(temps[0][0])
 nstep = len(temps[0])
 
 
-alpha = 1
-for k in range(len(temps)):
-    for j in range(1,len(temps[0])):
-        for i in range(len(temps[0][0])-2,0,-1):
-            temps[k][j][i] = alpha * temps[k][j][i] + (1 - alpha) * (temps[k][j][i - 1]+temps[k][j][i+1])/2
+mask = [0.25, 0.5, 0.25]
+mask = [1/2 for i in range(2)]
+mask = [1]
+temps = convolve1d(temps, mask, axis=-2, )
+
+
+
 
 
 ftemps = []
@@ -76,40 +79,39 @@ for i in range(nstep):
         tps = np.array( [temps[k][i][j] for k in range(len(temps))] )
 
         out[j] = np.average(tps)
-        uout[j] = 1.5*np.std(tps) / len(temps)**0.5
+        uout[j] = 2.45 * np.std(tps) / len(temps)**0.5
     ftemps.append(out)
     utemps.append(uout)
 
 ftemps = np.array(ftemps)
 utemps = np.array(utemps)
 
-print(ftemps[0])
-
-print(ftemps[5])
-
 
 fig = plt.figure(figsize=(9, 5), dpi=120)
 xs = np.array([(i + 0.5) / n * 1 for i in range(n)]) -0.5
 xshr = np.array([(i + 0.5) / n * 0.1 for i in range(n*10)]) -0.5
+
 plt.grid()
 plt.xlabel("x (m)")
 plt.ylabel("$\\alpha$")
 
 
-nbPlot = 4
-indices = [0]
-for i in range(0,nbPlot-1 ):
-    indices.append(int(nstep ** ((i + 2) / nbPlot)) - 2)
+indices = [5,20, 50, len(ftemps)-1]
+alphas = [0.35, 0.55, 0.75, 0.95]
 
-#indices[-1] -= 10
-tau=  1/(D*(np.pi/L)**2) * 1000 # in ms
 
-for i in indices:
-    plt.fill_between(xs, ftemps[i] - utemps[i], ftemps[i] + utemps[i], alpha=0.5 + i / nstep * 0.5, facecolor='red', label="$t/\\tau_0'$ = " + str(int(ts[i]*100/tau)/100))
+def initial(xs):
+    return np.array([Tg if x<0 else Td for x in xs])
 
-    t = ts[i]+1e-3
-    solTH = getTxt(xshr,t)
-    plt.plot(xshr, solTH, "-.k", alpha=0.5 + i / nstep * 0.5)
+plt.plot(xshr, initial(xshr),"-.k", alpha=0.7  )#, label="$t/\\tau_0$ = 0"  )
+plt.xticks([-0.5,-0.25, 0, 0.25, 0.5])
+
+for j in range(len(indices)):
+    i = indices[j]
+    plt.fill_between(xs, ftemps[i] - utemps[i], ftemps[i] + utemps[i], alpha=alphas[j], facecolor='red', label="$t/\\tau_{\\rm p}$ = " + str(round(ts[i]/tau,3)) )
+    solTH = getTxt(xshr,ts[i])
+    plt.plot(xshr, solTH, "-.k", alpha=0.7)
+    print(alphas[j])
 
 fig.tight_layout()
 plt.legend()

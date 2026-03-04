@@ -198,14 +198,23 @@ class Domain:
         p = 0
         for c in self.cells:
             p += c.instantPressure / len(self.cells)  # average of pressure over multiple cells
-
         return p
+
+    def getPressures(self):
+        ps = []
+        for c in self.cells:
+            ps.append(c.instantPressure)
+        return ps
+
+
 
     def count(self):
         count = 0
         for c in self.cells:
             count += c.count()
         return count
+
+
 
     def countLeft(self):
         count = 0.
@@ -242,6 +251,13 @@ class Domain:
             ec += ecl + ecr
         return ec
 
+    def getKineticEnergies(self):
+        ecs = []
+        for c in self.cells:
+            ecl, ecr = c.computeKineticEnergy()
+            ecs.append(ecl + ecr)
+        return ecs
+
     def computeMacroscopicKineticEnergy(self):
         ecm = 0.
         for c in self.cells:
@@ -249,14 +265,7 @@ class Domain:
             ecm += ecl + ecr
         return ecm
 
-    """
-    def getAveragedTemperatures(self):
-        out = []
-        for cell in self.cells:
-            temp = cell.computeTemperature()
-            out.append(cell.averagedTemperature)
-        return out
-    """
+
 
     def computeTemperature(self):
         return (self.computeKineticEnergy() - self.computeMacroscopicKineticEnergy())  / ComputedConstants.nbPartTarget / ComputedConstants.kbs
@@ -264,11 +273,50 @@ class Domain:
     def computeTemperatureUncorrected(self):
         return (self.computeKineticEnergy() )  / ComputedConstants.nbPartTarget / ComputedConstants.kbs
 
+    def getCounts(self,nBin):
+        if len(self.cells) % nBin != 0:
+            print("wrong nBin")
+            return "wrong nBin"
 
-    def getColorRatios(self):
         out = []
-        for cell in self.cells:
-            out.append(cell.computeColorRatio())
+        for i in range(len(self.cells) // nBin):
+            partial = 0
+            for j in range(nBin):
+                partial += self.cells[i * nBin + j].count()
+
+            out.append(partial)
+
+        return out
+
+    def getTemperatures(self,nBin ):
+        if len(self.cells) % nBin != 0:
+            print("wrong nBin")
+            return "wrong nBin"
+
+        out = []
+        for i in range(len(self.cells) // nBin):
+            partial = 0
+            for j in range(nBin):
+                partial += self.cells[i * nBin + j].computeTemperature() / nBin
+
+            out.append(partial)
+
+        return out
+
+
+    def getColorRatios(self,nBin):
+        if len(self.cells)%nBin != 0:
+            print("wrong nBin")
+            return "wrong nBin"
+
+        out = []
+        for i in range(len(self.cells)//nBin):
+            partial = 0
+            for j in range(nBin):
+                partial += self.cells[i*nBin+j].computeColorRatio() / nBin
+
+            out.append(partial)
+
         return out
 
 

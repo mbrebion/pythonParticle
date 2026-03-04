@@ -18,16 +18,16 @@ X = 1
 Y = 0.1
 ls = 20e-3
 
-nPart = 256000
-T = 300
+nPart = 1024000*2
+T = 298.7
 P = 1e5
 
-for ii in range(7,16):
+for ii in range(0,8):
     ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
     ComputedConstants.dt *= 1
-    nbDomains = 16
+    nbDomains = 256
     tHigh = 320.
-    tLow = 2 * T - tHigh
+    tLow = 280.
     alpha = tLow / tHigh
     rg = alpha / (1 + alpha)
     rd = 1 - rg
@@ -40,33 +40,41 @@ for ii in range(7,16):
         ratios[j] = rd / nbDomains
 
     domain = Domain(nbDomains, effectiveTemps=effectiveTemps, ratios=ratios)
-    domain.setMaxWorkers(4)
+    domain.setMaxWorkers(2)
 
     instants = []
     temps = []
+    ns = []
 
     it = 0
 
     tMax = 24e-3 #s
 
     instants.append(ComputedConstants.time)
-    temps.append(domain.getAveragedTemperatures())
-    ComputedConstants.alphaAveraging = 0.05
+    temps.append(domain.getTemperatures(8))
+    ns.append(domain.getCounts(8))
+
+    file = "runls20mm_VHD_" + str(ii) + ".py"
+    f = open(file, "a")
+    f.write("import numpy as np")
+    f.close()
+
     while ComputedConstants.time <= tMax:
         it += 1
         domain.update()
 
-        if it%20 == 0:
-            domain.getAveragedTemperatures()
-
-        if it % 1000 == 1:
+        if it % 75 == 1:
             time.sleep(3)
             print(100 * ComputedConstants.time/tMax, "%")
-            print(domain.getAveragedTemperatures(), ComputedConstants.alphaAveraging)
-        if it % 1000 == 1:
+            print(domain.getTemperatures(8))
+            print(domain.getCounts(8))
+            print()
+        if it % 75 == 1:
             instants.append(ComputedConstants.time)
-            temps.append(domain.getAveragedTemperatures())
+            temps.append(domain.getTemperatures(8))
+            ns.append(domain.getCounts(8))
 
-    file = "runls20mm_highdiff_"+str(ii)+".py"
+
     printList(instants, "ts",file)
     printList(temps, "temps",file)
+    printList(ns, "ns", file)
