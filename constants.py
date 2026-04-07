@@ -18,10 +18,11 @@ RIGHT = 2
 
 
 
-
 class ComputedConstants:
     meanFreePath = None
+    meanFreeTime = None
     vStar = None
+    vAv = None
     nbPartTarget = None
     dt = None
     ds = None
@@ -78,7 +79,9 @@ class ComputedConstants:
         cls.ms = thermo.getMSimu(MASS, Kb, cls.kbs)
         cls.ds = thermo.getDiameter(cls.surface, cls.nbPartTarget, cls.ls)
         cls.vStar = thermo.getMeanSquareVelocity(cls.kbs, cls.ms, cls.initTemp)
-        cls.dt = thermo.getDtCollision(cls.vStar, cls.ls, drOverLs)
+        cls.vAv = cls.vStar * np.sqrt(np.pi) / 2
+        cls.dt = thermo.getDtCollision(cls.vAv, cls.ls, drOverLs)
+        cls.meanFreeTime = cls.ls / cls.vStar
         cls.fillRatio = (cls.ds / 2) ** 2 * math.pi * cls.nbPartTarget / cls.surface
 
         cls.time = 0.
@@ -130,8 +133,10 @@ class ComputedConstants:
         cls.ms = thermo.getMSimu(MASS, Kb, cls.kbs)
 
         cls.vStar = thermo.getMeanSquareVelocity(cls.kbs, cls.ms, cls.initTemp)
-        cls.dt = thermo.getDtCollision(cls.vStar, cls.ls,drOverLs)
+        cls.vAv = cls.vStar * np.sqrt(np.pi) / 2
+        cls.dt = thermo.getDtCollision(cls.vAv, cls.ls,drOverLs)
         cls.fillRatio = (cls.ds/2)**2 * math.pi * cls.nbPartTarget / cls.surface
+        cls.meanFreeTime = cls.ls / cls.vStar
 
         cls.time = 0.
         cls.it = 0

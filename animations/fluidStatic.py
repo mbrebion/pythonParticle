@@ -20,7 +20,7 @@ def newAdvect(self):
     self.coords.vxs += -9.81 * ComputedConstants.dt * 2
 
 
-Cell.advect = newAdvect
+Cell.stream = newAdvect
 Cell.coloringPolicy = "coll"
 
 for i in range(100):

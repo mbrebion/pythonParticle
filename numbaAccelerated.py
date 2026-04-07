@@ -81,48 +81,6 @@ def moveSwapToNeighbor(xsa, ysa, vxsa, vysa, wheresa, lastColla, cola, xsb, ysb,
         fromAtoB(i, bestIndex, xsa, ysa, vxsa, vysa, wheresa, lastColla,cola, xsb, ysb, vxsb, vysb, wheresb, lastCollb, colb)
 
 
-@jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def indicesToSwapRight(xs, xmax, wheres, indices):
-    """
-    retrieve the indices of particle which must be swapped to right and store them to indices
-    :param xs: x coordinates
-    :param xmax: end of cell coordinate
-    :param wheres: mask
-    :param indices: output array
-    :return: Number of particle to swap
-    """
-
-    for i in range(len(indices)):
-        indices[i] = 0
-    newIndex = 0
-
-    for i in range(len(xs)):
-        if xs[i] > xmax and wheres[i] != 0:
-            indices[newIndex] = i
-            newIndex += 1
-    return newIndex
-
-
-@jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def indicesToSwapLeft(xs, xmin, wheres, indices):
-    """
-    retrieve the indices of particle which must be swapped to right and store therm to indices
-    :param xs: x coordinates
-    :param xmin: begin of cell coordinate
-    :param wheres: mask
-    :param indices: output array
-    :return: Number of particle to swap
-    """
-
-    for i in range(len(indices)):
-        indices[i] = 0
-    newIndex = 0
-
-    for i in range(len(xs)):
-        if xs[i] < xmin and wheres[i] != 0:
-            indices[newIndex] = i
-            newIndex += 1
-    return newIndex
 
 
 ##############################################################
@@ -146,7 +104,7 @@ def goodIndexToInsertTo(y, ys, wheres, ymax):
     index = int(y / ymax * len(ys))
 
     # then find index in arrays with closest y ; should be fast if guess is correct
-    while index >0 and ys[index] > y:
+    while index > 0 and ys[index] > y:
         index -= 1
     while index < len(ys) and ys[index] < y:
         index += 1
@@ -426,7 +384,7 @@ def staticWallInterractionDown(ys, vxs, vys, wheres,lastColls,colors, width, dt,
     sqtwo = (4 / 3) ** 0.5
 
 
-    for i in range(len(ys)):
+    for i in range(len(ys)//4):
         if wheres[i] == 0:
             continue
 
@@ -472,7 +430,7 @@ def staticWallInterractionUp(ys, vxs, vys, wheres,lastColls,colors, width, dt, m
     sqtwo = (4 / 3) ** 0.5
 
 
-    for i in range(len(ys)):
+    for i in range(3*len(ys)//4, len(ys)):
         if wheres[i] == 0:
             continue
 
@@ -819,16 +777,15 @@ def detectAllCollisions(xs, ys, vxs, vys, wheres, lastColls,colors, indicesLeft,
 
 
             # The following is very important, this criterion is used to stop the searches for part i and step to part
-            # i+1.  If too restrictive, collisions might be missed. If too broad, computation time may increase
+            # i+1.
+            # If too restrictive, collisions might be missed. If too broad, computation time may increase
             if abs(ys[j]-y) > ((-vy + vymax) * dt + d)*secureSearchCoeff :
                 break  # if here, other particles are too high to be able to interact with particle i
 
             coll, odt = isCollidingFast(x, y, xs[j], ys[j], vx, vy, vxs[j], vys[j], dt, d, lc, lastColls[j],time)
-
+            nbCollide += 1.
             if coll:
-                nbCollide += 1.
-
-                deltaR = (vys[j] ** 2 + vxs[j] ** 2) ** 0.5 * (time - odt - lastColls[j])
+                #nbCollide += 1.
 
                 dealWithCollision(xs, ys, vxs, vys, xs, ys, vxs, vys, i, j, odt)
                 lastColls[i] = time - odt
@@ -1038,9 +995,9 @@ def twoArraysToTwo(x, y, mask, xForDisplay, yForDisplay):
 
 
 @jit(nopython=True, cache=True, fastmath=True, nogil=True)
-def advect(xs, ys, vxs, vys, dt, forcex, mass):
+def stream(xs, ys, vxs, vys, dt, forcex, mass):
     """
-    Use Verlet method to update velocities and positions
+    Use velocity Verlet method to update velocities and positions
     :param xs: x position
     :param ys:
     :param vxs: x velocity
@@ -1050,8 +1007,8 @@ def advect(xs, ys, vxs, vys, dt, forcex, mass):
     :param mass: mass of particles
     :return:
     """
-    dec = forcex * dt / mass # assummed null or constant
+    dec = forcex * dt / mass #  null or constant
     for i in range(len(xs)):
         vxs[i] += dec
-        xs[i] += vxs[i] * dt + dec * dt / 2  # Verlet Trick
+        xs[i] += vxs[i] * dt + dec * dt / 2
         ys[i] += vys[i] * dt + dec * dt / 2

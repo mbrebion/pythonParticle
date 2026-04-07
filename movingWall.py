@@ -26,7 +26,7 @@ class MovingWall:
     def unSetFree(self):
         self.imposedVelocity = self.savedImposedVelocity
 
-    def advect(self):
+    def stream(self):
         # update velocity (enforced or computed)
         if self.imposedVelocity is not None:
             t = ComputedConstants.time

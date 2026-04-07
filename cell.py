@@ -22,6 +22,7 @@ class Cell:
         :param colorRatio : ratio of particles to colorize in white (1)
         """
 
+        self.sumCollide = 0 # cumulative sum of all collisions in this cell and at interface
         self.lastNbCollide = 0
         self.lastNbCollideInterface = 0
 
@@ -332,6 +333,8 @@ class Cell:
 
         self.computePressure(fup, fdown, fleft, fright)
 
+
+
     def interfaceCollide(self):
         if self.leftCell is not None:
             self.lastNbCollideInterface = numbaAccelerated.detectCollisionsAtInterface(self.coords.indicesLeftOfCell,
@@ -342,6 +345,7 @@ class Cell:
                                                                                        ComputedConstants.ds,
                                                                                        ComputedConstants.time,
                                                                                        )
+            self.sumCollide += self.lastNbCollideInterface
 
     def collide(self):
         """
@@ -356,6 +360,7 @@ class Cell:
                                                                   None, Cell.coloringPolicy, self.left,
                                                                   self.right, ComputedConstants.time
                                                                   )
+        self.sumCollide += self.lastNbCollide
 
 
     def sort(self):
@@ -379,8 +384,8 @@ class Cell:
 
         return self.positions
 
-    def advect(self):
-        numbaAccelerated.advect(self.coords.xs, self.coords.ys, self.coords.vxs, self.coords.vys, ComputedConstants.dt,
+    def stream(self):
+        numbaAccelerated.stream(self.coords.xs, self.coords.ys, self.coords.vxs, self.coords.vys, ComputedConstants.dt,
                                 ComputedConstants.forceX, ComputedConstants.ms)
 
     def middle(self):
@@ -402,9 +407,7 @@ class Cell:
 
     def update(self):
         # update everything before interface collisions
-        self.advect()
-
-
+        self.stream()
 
         if Cell.collision:
             self.sort()

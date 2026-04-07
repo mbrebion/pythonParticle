@@ -1,8 +1,10 @@
+import time
 from cell import Cell
 from constants import *
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 from movingWall import MovingWall
+
 
 
 class Domain:
@@ -63,8 +65,7 @@ class Domain:
         self.trackers = []
 
         # nbcollisions
-        self.insideAverage = 0
-        self.interfaceAverage = 0
+        self.totalCollisions = 0
         self.itCount = 0
 
         # single/multi thread default
@@ -73,6 +74,11 @@ class Domain:
 
         # wall
         self.wall = None
+
+        # timing
+        self.collNSortTime = 0.
+        self.interfaceCollTime = 0.
+        self.swapTime = 0.
 
     def setMaxWorkers(self, mw):
         if mw > 1:
@@ -328,30 +334,28 @@ class Domain:
         self.itCount = 0
 
     def countCollisions(self):
-        a = 1 / (1 + self.itCount)
-        self.itCount += 1
-        inside = 0
-        interface = 0
+        self.totalCollisions =0
         for c in self.cells:
-            inside += c.lastNbCollide
-            interface += c.lastNbCollideInterface
+            self.totalCollisions += c.sumCollide
 
-        self.insideAverage = self.insideAverage * (1 - a) + a * inside
-        self.interfaceAverage = self.interfaceAverage * (1 - a) + a * interface
+    def resetCountCollisions(self):
+        self.totalCollisions = 0
+        for c in self.cells:
+            c.sumCollide = 0
 
     ##############################################################
     ##################         Update      #######################
     ##############################################################
 
-    def advectMovingWall(self):
+    def streamMovingWall(self):
         if self.wall is not None:
-            self.wall.advect()
+            self.wall.stream()
 
     def _updateMultipleT(self):
         ComputedConstants.it += 1  # to be moved upper once cells are gathered in broader class
         ComputedConstants.time += ComputedConstants.dt
 
-        self.advectMovingWall()
+        self.streamMovingWall()
 
         futures = []
         if ComputedConstants.it % 2 == 0:
@@ -392,8 +396,9 @@ class Domain:
         ComputedConstants.it += 1  # to be moved upper once cells are gathered in broader class
         ComputedConstants.time += ComputedConstants.dt
 
-        self.advectMovingWall()
+        self.streamMovingWall()
 
+        t = time.perf_counter()
         if ComputedConstants.it % 2 == 0:
             for c in self.cells:
                 c.update()
@@ -401,14 +406,25 @@ class Domain:
             for c in reversed(self.cells):
                 c.update()
 
+        t1 = time.perf_counter()
+        self.collNSortTime += t1 - t
+
+
+
         for c in self.cells:
             c.interfaceCollide()
+
+        t2 = time.perf_counter()
+        self.interfaceCollTime += t2-t1
 
         for c in self.cells:
             c.prepareSwap()
 
         for c in self.cells:
             c.applySwap()
+
+        t3 = time.perf_counter()
+        self.swapTime += t3-t2
 
         if ComputedConstants.periodic:
             for c in self.cells:
@@ -419,3 +435,8 @@ class Domain:
 
         if ComputedConstants.it % 10 == 0:
             self.reshapeCells()
+
+    def resetTimes(self):
+        self.swapTime = 0.
+        self.collNSortTime = 0.
+        self.interfaceCollTime =0.
