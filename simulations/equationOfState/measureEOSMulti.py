@@ -1,101 +1,174 @@
 import math
-import time
 
 from domain import Domain
-from constants import ComputedConstants
 import numpy as np
 
 X = 0.1
 Y = 0.1
-nPart = 32e3
+nPart = 4000
 T = 300
 P = 1e5
-eta = 0.05
-# eta = N pi (ds/2)^2 / (XY)
+eta = 0.003
 ds = math.sqrt(eta * X * Y / nPart / math.pi) * 2
+# we use the way ds is computed from ls to impose ds, without changing the code !
+Z = (1.0 + (eta ** 2) / 8.0) / (1 - eta) ** 2
+ls = (np.pi * ds) / (4*np.sqrt(2) * (Z - 1.0))
+d = 1/4
+c = 1/15
 
-# P (S - N b) = N k T <- low density approx
-# ( P S ) / (N k T) = 1 / (1-eta)^2  <- better model
+dol = 0.005
 
-ComputedConstants.thermodynamicSetupFixedDiameter(T, X, Y, P, nPart, ds)
-domain = Domain(8)
-domain.setMaxWorkers(2)
-ComputedConstants.dt *= 1
-
-ps = []
-ts = []
-it = 0
-print("warm up")
-print("z_th = ", 1/(1-eta)**2)
+print("N_t = ", round((d/c)**2 * X / dol / ls))
+print("ls/X = ", round(ls/X,5))
+nc = 4
+print("z_th = ", 1 / (1 - eta) ** 2)
 alpha = 0.1280
-
-print("z_th,2 = ", (1+alpha*eta**2)/(1-eta)**2 )
-
-while it < 5000:
-    it += 1
-    domain.update()
-
-domain.resetCount()
-print("start recording")
-while it < 500e3     :
-    it += 1
-    domain.update()
-    ps.append(domain.computePressure())
-    ts.append(domain.computeTemperature())
-    if it % (10000) == 0:
-
-        p = np.average(ps)
-        up = np.std(ps) / len(ps)**(3/4) # / np.sqrt(len(ps)) # correlated measures
-        t = np.average(ts)
-        z = p * X*Y / (nPart * ComputedConstants.kbs*t)
-        print(it, ComputedConstants.time, p,up,t,z)
-
-
-#eta = 0.001 ; Z_th = 1.00200
-    # dt x 1
-    #nPart  1024000(X128)  64000 (X16)  16000 (X4)
-    #Z       1.0015(1)      1.0019(2)   1.00201(2)
-
-    # dt x 0.25
-    #nPart  1024000(X256)  64000 (X16)  16000 (X4)
-    #Z         1.0020     1.0021(2)    1.00222(4)
-
-    # dt x 4
-    #nPart  1024000(X128)  64000 (X16)  16000 (X4)
-    #Z       1.00052      1.00180(4)    1.00222(4)
-
-
-#eta = 0.1 ; Z_th = 1.020304 ; 1.020317
-    # dt x 1
-    # nPart  1024000(X128)  64000 (X16)  16000 (X4)
-    # Z       1.02020(5)    1.02029(2)   1.02034(1)
-
-    # dt x 0.25
-    # nPart  1024000(X128)  64000 (X16)  16000 (X4)
-    # Z       1.020494(20)  1.02057(3)   1.02061(4)
-
-    # dt x 4
-    # nPart  1024000(X128)  64000 (X16)  16000 (X4)
-    # Z                                  1.01865(5)
-
-
-#eta = 0.1 ; Z_th = 1.2345 ; 1.2361
-    # dt x 1
-    # nPart  1024000(X128)  64000 (X16)  16000 (X4)
-    # Z                      1.23592(3)      1.2354 (1)
-
-
-    # dt x 0.25
-    # nPart  1024000(X128)  64000 (X16)  16000 (X4)    10000 (X1)
-    # Z                      1.23600     1.2353 (1)     1.2341
-
-    # dt x 4
-    # nPart  1024000(X128)  64000 (X16)  16000 (X4)    1000 (X1)
-    # Z                     1.235901      1.2354       1.23280
-
-#eta = 0.3
-#n = 64000 ; Dt x1 : 2.0580   ; Dt x0.1 : 2.0579
+print("z_th,2 = ", (1 + alpha * eta ** 2) / (1 - eta) ** 2)
 
 
 
-#eta = 0.05 n=32000 ; Dt = 1 : 1.10873
+def run(nb):
+    domain = Domain( nc, T, X, Y, P, nPart, ls, drOverLs=dol,maxWorkers=1, hideStartupOutput=nb != 0)
+    ps = []
+    ntau = 1500
+    while domain.csts["time"] < ntau/5*domain.csts["tau"]:
+        domain.update()
+    print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+
+    domain.resetCollisions()
+    domain.resetTimes()
+    it = 0
+
+    while domain.csts["time"] < ntau*domain.csts["tau"]  :
+        domain.update()
+        ps.append(domain.computePressure())
+        it +=1
+
+
+    inCol, betweenCol = domain.countCollisions()
+    percentColl = (inCol + betweenCol) / domain.csts["time"] *domain.csts["tau"] / (nPart/2) * 100
+    p = np.average(ps)
+
+    z = p * X*Y / (nPart * domain.csts["kbs"]*T)
+
+    return z,percentColl*5/4
+
+zs = []
+percents=[]
+for r in range(50):
+    z,percent = run(r)
+    zs.append(z)
+    percents.append(percent)
+    p = np.average(percents)
+    up = np.std(percents) / len(percents)**0.5 *2
+    z = np.average(zs)
+    uz = np.std(zs) / len(zs) ** 0.5 * 2.5
+    print("run nb : ", r+1)
+    print("percent of Coll : ", round(p,4), "+/-", round(up,4), " %")
+    print("              Z : ", round(z,6), "+/-", round(uz,6), " %")
+
+
+# ici dt est peu limitant car on a déjà d > l puis dOM/d << 1 ; les particules se déplacent peu lors d'un pas de temps
+
+##############################################@@
+#eta = 0.3  ; z_th2 = 2.0643
+#N = 4000 ; ls/X = 0.0051 ; dt=0.05
+#percent of Coll :  97.6968 +/- 0.0354  %
+#              Z :  2.041763 +/- 0.001807  %
+
+#N = 4000 ; ls/X = 0.0051 ; dt=0.02
+#percent of Coll :  97.50 +/- 0.0188  %
+#              Z :  2.03806 +/- 0.0014  %
+
+#N = 4000 ; ls/X = 0.0051 ; dt=0.005
+#percent of Coll :  97.397 +/- 0.088  %
+#              Z :  2.036538 +/- 0.001034  %
+
+#N = 16000 ; ls/X = 0.00255 ; dt=0.05
+#percent of Coll :  99.102 +/- 0.0153  %
+#              Z :  2.057039 +/- 0.00089  %
+
+#N = 16000 ; ls/X = 0.00255 ; dt=0.02
+#percent of Coll :  98.812 +/- 0.031  %
+#              Z :  2.052006 +/- 0.001783  %
+
+#N = 16000 ; ls/X = 0.00255 ; dt=0.002
+#percent of Coll :  98.66 +/- 0.0247  %
+#              Z :  2.049266 +/- 0.000908  %
+
+
+#N = 64000 ; ls/X = 0.00128 ; dt=0.05
+#percent of Coll :  99.634 +/- 0.0099  %
+#              Z :  2.064624 +/- 0.000944  %
+
+#N = 64000 ; ls/X = 0.00128 ; dt=0.02
+#percent of Coll :  99.428 +/- 0.0061  %
+#              Z :  2.058911 +/- 0.001676  %
+
+#N = 64000 ; ls/X = 0.00128 ; dt=0.005
+#percent of Coll :  99.357 +/- 0.0224  %
+#              Z :  2.057591 +/- 0.00244  %
+
+#N = 256000 ; ls/X = 0.00064 ; dt=0.05 ; nc = 64
+#percent of Coll :  99.9706 +/- 0.0088  %
+#              Z :  2.068785 +/- 0.001901  %
+
+#N = 256000 ; ls/X = 0.00064 ; dt=0.02 ; nc = 64
+#percent of Coll :  99.788  +/- 0.002  %
+#              Z :  2.066251 +/- 0.001331  %
+
+#N = 256000 ; ls/X = 0.00064 ; dt=0.02 ; nc = 8
+# percent of Coll :  99.798 +/- 0.0063  %
+#              Z :  2.066663 +/- 0.00117  %
+
+
+##############################################
+#eta = 0.03  ; z_th2 = 1.062923
+#N = 4000 ; ls/X = 0.027 ; dt=0.02
+#percent of Coll :  99.611 +/- 0.01  %
+#              Z :  1.062709 +/- 0.000338  %
+
+#N = 4000 ; ls/X = 0.027 ; dt=0.005
+#percent of Coll :  99.57 +/- 0.0206  %
+#              Z :  1.062672 +/- 0.000413  %
+
+
+#N = 16000 ; ls/X = 0.013 ; dt=0.02
+#percent of Coll :  99.876 +/- 0.0153  %
+#              Z :  1.062734 +/- 0.000763  %
+
+
+#N = 64000 ; ls/X = 0.0068 ; dt=0.02
+#percent of Coll :  99.965 +/- 0.0105  %
+#              Z :  1.062972 +/- 0.00059  %
+
+#N = 64000 ; ls/X = 0.0068 ; dt=0.005
+#percent of Coll :  99.906 +/- 0.0071  %
+#              Z :  1.062899 +/- 0.000201  %
+
+#N = 256000 ; ls/X = 0.0034 ; dt=0.02
+# percent of Coll :  100.0101 +/- 0.0039  %
+#              Z :  1.062978 +/- 0.000167  %
+
+#N = 256000 ; ls/X = 0.0034 ; dt=0.005
+#percent of Coll :  99.9651 +/- 0.0044  %
+#              Z :  1.062956 +/- 0.00034  %
+
+
+##############################################
+#eta = 0.003  ; z_th2 = 1.0060283
+#N = 4000 ; ls/X = 0.09 ; dt=0.02
+#percent of Coll :  98.9932 +/- 0.019  %
+#              Z :  1.005743 +/- 0.000304  %
+
+#N = 4000 ; ls/X = 0.09 ; dt=0.005
+#percent of Coll :  99.8392 +/- 0.0201  %
+#              Z :  1.005832 +/- 0.000393  %
+
+#N=256000 ; dt = 0.02
+#percent of Coll :  99.176 +/- 0.003  %
+#              Z :  1.005695 +/- 0.000255  %
+
+#N=256000 ; dt = 0.005
+#percent of Coll :  99.978 +/- 0.0043  %
+#              Z :  1.006029 +/- 0.000207  %

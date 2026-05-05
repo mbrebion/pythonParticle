@@ -1,4 +1,5 @@
 # set of thermo functions used to compute simulation values from real values
+import numpy as np
 
 def getNCollisionEstimate(Nc,ls,Hc,drOverLs):
     """
@@ -58,6 +59,43 @@ def getDiameter(S, Ns, ls):
     """
 
     return S / (2 * 2 ** 0.5 * Ns * ls)
+
+
+
+def getDiameterHenderson(S,Ns, ls, tol=1e-11, max_iter=1000):
+    """
+    compute the effective diameter, by taking into account the Henderson model
+    NewtonRaphson method is used to extract d
+    """
+    n = Ns/S
+    # first guess
+    d = 1.0 / (2 * 2**0.5 * n * ls)
+
+    for i in range(max_iter):
+
+        phi = min( (n * np.pi * d ** 2) / 4.0 , 0.8)
+
+        Z = (1.0 + (phi ** 2) / 8.0) / (1-phi) ** 2
+        delta = (np.pi * d) / (4*np.sqrt(2) * (Z - 1.0)) - ls
+
+        if abs(delta) < tol:
+            return d
+
+        h = d * 1e-3
+        phi_h = (n * np.pi * (d + h) ** 2) / 4.0
+        Z_h = (1.0 + (phi_h ** 2) / 8.0) / (1.0 - phi_h) ** 2
+        delta_dh = (np.pi * (d + h)) / (4*np.sqrt(2) * (Z_h - 1.0)) - ls
+        df = (delta_dh - delta) / h
+
+        if df == 0 : break
+        d = d - delta / df
+
+
+    return d
+
+
+# Exemple d'appel
+# d_final = get_diameter_numba(0.42, 0.5)
 
 
 def getMeanSquareVelocity(KbS, ms, temperature):

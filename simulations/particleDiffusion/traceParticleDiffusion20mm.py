@@ -8,7 +8,7 @@ font = {'family': 'times',
 matplotlib.rc('font', **font)
 
 ls = 20e-3
-vs = 413
+vs = 414.03
 
 L = 1
 Tg = 0.7
@@ -33,6 +33,14 @@ def getTxt(xs,t):
     for i in range(100):
         sol += harmo(i,xs,t)
     return sol
+
+#import runls20mm_final_1 as run
+#ts = run.ts
+#temps=[]
+#temps.append(np.copy(run.temps))
+
+#import runls20mm_final_2 as run
+#temps.append(np.copy(run.temps))
 
 
 ######
@@ -61,12 +69,10 @@ n = len(temps[0][0])
 nstep = len(temps[0])
 
 
-mask = [0.25, 0.5, 0.25]
-mask = [1/2 for i in range(2)]
-mask = [1]
-temps = convolve1d(temps, mask, axis=-2, )
-
-
+#mask = [0.25, 0.5, 0.25]
+#mask = [1/2 for i in range(2)]
+#mask = [1]
+#temps = convolve1d(temps, mask, axis=-2, )
 
 
 
@@ -95,8 +101,9 @@ plt.grid()
 plt.xlabel("x (m)")
 plt.ylabel("$\\alpha$")
 
-
-indices = [5,20, 50, len(ftemps)-1]
+n = len(ftemps)
+indices = [n//25, n//9,  n//3, n-1]
+print(indices)
 alphas = [0.35, 0.55, 0.75, 0.95]
 
 
@@ -108,7 +115,7 @@ plt.xticks([-0.5,-0.25, 0, 0.25, 0.5])
 
 for j in range(len(indices)):
     i = indices[j]
-    plt.fill_between(xs, ftemps[i] - utemps[i], ftemps[i] + utemps[i], alpha=alphas[j], facecolor='red', label="$t/\\tau_{\\rm p}$ = " + str(round(ts[i]/tau,3)) )
+    plt.fill_between(xs, ftemps[i] - utemps[i]-0.0005, ftemps[i] + utemps[i]+0.0005, alpha=alphas[j], facecolor='red', label="$t/\\tau_{\\rm p}$ = " + str(round(ts[i]/tau,3)) )
     solTH = getTxt(xshr,ts[i])
     plt.plot(xshr, solTH, "-.k", alpha=0.7)
     print(alphas[j])

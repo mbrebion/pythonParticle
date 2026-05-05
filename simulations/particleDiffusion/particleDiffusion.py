@@ -1,57 +1,57 @@
-import time
-from constants import ComputedConstants
 from domain import Domain
-
+from numbaAcc import measuring
+import numpy as np
+import sys
+np.set_printoptions(threshold=sys.maxsize)
 
 def printList(l, name,file):
     f = open(file, "a")
-    out = "["
-    for v in l:
-        out += str(v) + ","
-    out = out[0:-1] + "])"
-    f.write(name+ "= np.array("+ out+"\n")
+    f.write(name+ "= "+ repr(l)+"\n")
     f.close()
 
 
 X = 1
-Y = 0.1
+Y = 0.25
 ls = 20e-3
 
-nPart = 512000
+nPart = 1024000
 T = 300
 P = 1e5
+nc = 160*2
 
-ComputedConstants.thermodynamicSetup(T, X, Y, P, nPart, ls)
 
-nbDomains = 256
 
 leftColorRatio=0.7
 rightColorRatio = 1-leftColorRatio
-colorRatios = [leftColorRatio if i < nbDomains//2 else rightColorRatio for i in range(nbDomains)]
-domain = Domain(nbDomains, colorRatios=colorRatios)
-domain.setMaxWorkers(2)
+colorRatios = [leftColorRatio if i < nc//2 else rightColorRatio for i in range(nc)]
+domain = Domain( nc, T, X, Y, P, nPart, ls, drOverLs=0.006,maxWorkers=1,colorRatios=colorRatios)
 
 instants = []
 temps = []
 
 it = 0
-tMax = 24e-3*2 #s
+tMax = 24e-3*3 #s
 
-instants.append(ComputedConstants.time)
+instants.append(domain.csts["time"])
+ratios = [0. for _ in range(20)]
 
-while ComputedConstants.time <= tMax:
+while domain.csts["time"] <= tMax:
     it += 1
     domain.update()
 
-    if it % 500 == 1:
-        time.sleep(0.25)
-        print(100 * ComputedConstants.time/tMax, "%")
-        print(domain.getColorRatios(8))
-        print()
-    if it % 500 == 1:
-        instants.append(ComputedConstants.time)
-        temps.append(domain.getColorRatios(8))
+    if it % 1000 == 1:
+        print(100 * domain.csts["time"]/tMax, "%")
 
-file = "runls20mm_HD_6.py"
-printList(instants, "ts",file)
-printList(temps, "temps",file)
+        domain.computeParam(measuring.computeColorRatio,extensive=False, array=ratios)
+        print(ratios)
+        print()
+        instants.append(float(domain.csts["time"]))
+        temps.append([round(r,5) for r in ratios])
+
+file = "runls20mm_final_3.py"
+f = open(file, "w")
+f.write("from numpy import array\n")
+f.write("\n")
+f.close()
+printList(np.array(instants), "ts",file)
+printList(np.array(temps), "temps",file)
